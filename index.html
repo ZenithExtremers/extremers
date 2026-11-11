@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>エクストリーマーズ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app">
+
+  <section id="home" class="screen active">
+    <img class="logo" src="icons/icon-512.png" alt="エクストリーマーズのアイコン">
+    <h1 class="title">エクストリーマーズ</h1>
+    <p class="sub">ランダムな4人で、究極の課題に挑め。</p>
+    <div class="stack">
+      <button class="btn primary" data-start="cpu">CPUと対戦</button>
+      <button class="btn" data-start="2p">2人で対戦（1台を回す）</button>
+      <button class="btn ghost" id="openSettings">設定</button>
+    </div>
+    <p class="note" id="keyNote"></p>
+  </section>
+
+  <section id="settings" class="screen">
+    <h2 class="h2">設定</h2>
+    <label class="field">Claude APIキー
+      <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-...">
+    </label>
+    <label class="field">モデル
+      <select id="model">
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5（おすすめ）</option>
+        <option value="claude-haiku-5-5">Claude Haiku 5.5（速い・安い）</option>
+        <option value="claude-opus-5-5">Claude Opus 5.5（高品質）</option>
+      </select>
+    </label>
+    <p class="note">APIキーはこの端末の中にだけ保存され、Anthropicへの通信にだけ使われます。</p>
+    <div class="stack">
+      <button class="btn primary" id="saveSettings">保存</button>
+      <button class="btn ghost" data-go="home">戻る</button>
+    </div>
+  </section>
+
+  <section id="loading" class="screen">
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="loadingText" id="loadingText">準備中…</p>
+  </section>
+
+  <section id="error" class="screen">
+    <h2 class="h2">うまくいきませんでした</h2>
+    <p class="note" id="errorText"></p>
+    <div class="stack">
+      <button class="btn primary" id="retryBtn">もう一度</button>
+      <button class="btn ghost" data-go="home">タイトルへ</button>
+    </div>
+  </section>
+
+  <section id="handoff" class="screen">
+    <p class="kicker" id="handoffKicker"></p>
+    <h2 class="h2 big" id="handoffTitle"></h2>
+    <p class="note" id="handoffNote"></p>
+    <button class="btn primary" id="handoffBtn">準備OK</button>
+  </section>
+
+  <section id="draft" class="screen">
+    <div class="draftHead">
+      <span class="kicker" id="draftKicker"></span>
+      <span class="who" id="draftWho"></span>
+    </div>
+    <div class="timer"><div class="bar" id="timerBar"></div></div>
+    <div class="cards" id="cards"></div>
+    <div class="myTeam" id="myTeam"></div>
+  </section>
+
+  <section id="reveal" class="screen">
+    <p class="kicker">全チーム公開</p>
+    <div id="teamsBox"></div>
+    <div class="taskBox">
+      <p class="kicker">究極の課題</p>
+      <p class="task" id="taskText"></p>
+    </div>
+    <button class="btn primary" id="beginBtn">挑戦スタート</button>
+  </section>
+
+  <section id="stage" class="screen">
+    <p class="kicker" id="stageKicker"></p>
+    <p class="scene" id="sceneText"></p>
+    <p class="who" id="stageWho"></p>
+    <div class="stack" id="optionsBox"></div>
+  </section>
+
+  <section id="result" class="screen">
+    <p class="kicker" id="resultKicker"></p>
+    <div id="resultBox"></div>
+    <div class="score" id="scoreBox"></div>
+    <button class="btn primary" id="resultNext"></button>
+  </section>
+
+  <section id="final" class="screen">
+    <p class="kicker">決着</p>
+    <h2 class="winner" id="winnerText"></h2>
+    <p class="scene" id="epilogueText"></p>
+    <div class="score" id="finalScore"></div>
+    <div class="stack">
+      <button class="btn primary" id="againBtn">もう一度あそぶ</button>
+      <button class="btn ghost" data-go="home">タイトルへ</button>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

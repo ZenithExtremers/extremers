@@ -45,34 +45,35 @@ function fail(err, again) {
 
 /* ---------- 設定 ---------- */
 const store = {
-  get key() { try { return localStorage.getItem('ext_key') || ''; } catch { return ''; } },
-  set key(v) { try { localStorage.setItem('ext_key', v); } catch {} },
-  get model() { try { return localStorage.getItem('ext_model') || 'claude-sonnet-5-5'; } catch { return 'claude-sonnet-5-5'; } },
-  set model(v) { try { localStorage.setItem('ext_model', v); } catch {} },
+  get key() { try { return localStorage.getItem('ext_gkey') || ''; } catch { return ''; } },
+  set key(v) { try { localStorage.setItem('ext_gkey', v); } catch {} },
+  get model() { try { return localStorage.getItem('ext_gmodel') || 'gemini-3.5-flash'; } catch { return 'gemini-3.5-flash'; } },
+  set model(v) { try { localStorage.setItem('ext_gmodel', v); } catch {} },
 };
 function refreshKeyNote() {
-  $('#keyNote').textContent = store.key ? '' : 'はじめに「設定」でClaude APIキーを入れてください。';
+  $('#keyNote').textContent = store.key ? '' : 'はじめに「設定」でGemini APIキー（無料）を入れてください。';
 }
 
-/* ---------- Claude API ---------- */
+/* ---------- Gemini API（無料枠） ---------- */
 async function ask(system, user, maxTokens = 4000) {
   if (!store.key) throw new Error('APIキーが未設定です。タイトルの「設定」から入れてください。');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(store.model)}:generateContent`, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': store.key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({ model: store.model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': store.key },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { responseMimeType: 'application/json', maxOutputTokens: Math.max(maxTokens * 3, 16000), temperature: 1 },
+    }),
   });
   if (!res.ok) {
     const t = await res.text();
+    if (res.status === 429) throw new Error('無料枠の回数上限に達しました。少し時間をおくか、設定で別のモデルに切り替えてください（1日の上限は日本時間の夕方ごろにリセットされます）。');
+    if (res.status === 400 || res.status === 403) throw new Error(`APIキーかモデルの設定を確認してください（${res.status}）：${t.slice(0, 200)}`);
     throw new Error(`API エラー（${res.status}）：${t.slice(0, 300)}`);
   }
   const j = await res.json();
-  const txt = (j.content || []).map((c) => c.text || '').join('');
+  const txt = (j.candidates?.[0]?.content?.parts || []).map((p) => (p.thought ? '' : p.text || '')).join('');
   const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
   if (a < 0 || b < 0) throw new Error('AIの返答を読み取れませんでした。');
   return JSON.parse(txt.slice(a, b + 1));

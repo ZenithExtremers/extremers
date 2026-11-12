@@ -12,7 +12,7 @@ const GROOVE_MILD = ['infiltrate', 'riot', 'build', 'contest', 'persuade', 'hide
 // 対戦相手との駆け引き
 const KIND = { normal: 'normal', sabotage: 'sabotage', coop: 'coop' };
 const SABOTAGE_HIT = 25, SABOTAGE_COST = 10, COOP_BOTH = 20, BETRAY_BONUS = 10;
-const APT_W = { fit: 6, stretch: 3, none: 1 };
+const APT_W = { fit: 27, stretch: 4, none: 1 }; // ぴったりの人が1人いれば約9割でその人
 const APT_RATE = { fit: 80, stretch: 50, none: 20 };
 const OUT_CHANCE = 30;
 
@@ -58,17 +58,43 @@ function toast(msg) {
 function stars(n) { return '★'.repeat(n) + '<i>' + '★'.repeat(5 - n) + '</i>'; }
 /* 読み込み中の文言。配列なら少しずつ切り替える */
 let loadingTimer = null;
-function loading(text) {
-  clearInterval(loadingTimer);
+const TIPS = [
+  '妨害は相手の成功ラインを25下げる。ただし自分も10下がる',
+  '両チームが共闘を選ぶと、どちらも成功ライン+20',
+  '共闘を持ちかけてきた相手を妨害すると、さらに+10',
+  '体を使う作戦は、運動神経の★で成功ラインが上下する',
+  '失敗すると30%の確率で、実行した人が退場（最終関門は除く）',
+  '最終関門は40点。ここで一気に逆転できる',
+  '惜しい失敗でも少しだけ点が入る。大成功ほど高得点',
+  '作戦に向いている人ほど、実行役に選ばれやすい',
+  '相手チームの能力は、関門画面の下で確認できる',
+  '無料枠は毎日17時ごろ（日本時間）にリセットされる',
+  '右上のスピーカーボタンでBGMをミュートできる',
+  '終わった対戦は、タイトルの「対戦ログ」で見返せる',
+];
+let tipTimer = null;
+/* 読み込み画面：実況（8秒ごと）＋走る棒人間＋対決表示＋チップス＋ミニゲーム */
+function loading(text, vs) {
+  clearInterval(loadingTimer); clearInterval(tipTimer);
   const lines = Array.isArray(text) ? text : [text];
   let i = 0;
   const el = $('#loadingText');
   el.textContent = lines[0];
+  const alive = () => $('#loading').classList.contains('active');
   if (lines.length > 1) loadingTimer = setInterval(() => {
-    if (!$('#loading').classList.contains('active')) return clearInterval(loadingTimer);
+    if (!alive()) return clearInterval(loadingTimer);
     i = (i + 1) % lines.length; el.textContent = lines[i];
-  }, 2200);
+  }, 8000);
+  $('#loadVs').innerHTML = vs || '';
+  $('#runner').innerHTML = runnerSVG(vs ? 2 : 1);
+  let ti = rnd(TIPS.length) - 1;
+  $('#loadTip').textContent = TIPS[ti];
+  tipTimer = setInterval(() => { if (!alive()) return clearInterval(tipTimer); ti = (ti + 1) % TIPS.length; $('#loadTip').textContent = TIPS[ti]; }, 8000);
+  miniReset();
   show('loading');
+}
+function vsHTML(a, b, sub) {
+  return `<div class="vsRow"><div class="vsSide a"><span>🟥 ${esc(S.names[0])}</span><b>${esc(a)}</b></div><div class="vsMark">VS</div><div class="vsSide b"><span>🟦 ${esc(S.names[1])}</span><b>${esc(b)}</b></div></div>${sub ? `<p class="vsSub">${sub}</p>` : ''}`;
 }
 const INTRO_LINE = {
   assassin: '標的の足取りを追跡中…', guard: '要人の周囲を固めています…', escape: '脱出ルートを探っています…',
@@ -99,7 +125,8 @@ const store = {
   get key() { try { return localStorage.getItem('ext_gkey') || ''; } catch { return ''; } },
   set key(v) { try { localStorage.setItem('ext_gkey', v); } catch {} },
   get model() { try { return localStorage.getItem('ext_gmodel') || 'gemini-3.5-flash'; } catch { return 'gemini-3.5-flash'; } },
-  set model(v) { try { localStorage.setItem('ext_gmodel', v); } catch {} },
+  set model(v) { try { localStorage.setItem('ext_gmodel', v); } catch {} this.thinkOk = undefined; },
+  thinkOk: undefined,
 };
 function refreshKeyNote() {
   if (typeof renderToday === 'function') renderToday();
@@ -147,16 +174,24 @@ function refreshQuota() {
 /* ---------- Gemini API（無料枠） ---------- */
 async function ask(system, user, maxTokens = 4000) {
   if (!store.key) throw new Error('APIキーが未設定です。タイトルの「設定」から入れてください。');
-  quota.add();
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(store.model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': store.key },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: user }] }],
-      generationConfig: { responseMimeType: 'application/json', maxOutputTokens: Math.max(maxTokens * 3, 16000), temperature: 1 },
-    }),
-  });
+  // 待ち時間を短くするため、AIの考える量を最小にする（使えないモデルなら外して送り直す）
+  const m = store.model;
+  const thinking = /^gemini-2\.5-pro/.test(m) ? { thinkingBudget: 128 } : /^gemini-2\./.test(m) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' };
+  const send = (withThinking) => {
+    quota.add();
+    const gc = { responseMimeType: 'application/json', maxOutputTokens: Math.max(maxTokens * 3, 16000), temperature: 1 };
+    if (withThinking) gc.thinkingConfig = thinking;
+    return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': store.key },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: gc }),
+    });
+  };
+  let res = await send(store.thinkOk !== false);
+  if (res.status === 400) {
+    const t0 = await res.clone().text();
+    if (/thinking/i.test(t0)) { store.thinkOk = false; res = await send(false); }
+  }
   if (!res.ok) {
     const t = await res.text();
     if (res.status === 429) {
@@ -338,7 +373,7 @@ function showReveal() {
 
 /* ---------- 関門 ---------- */
 async function firstStage() {
-  loading([INTRO_LINE[S.mood] || 'ミッション開始…', '第1関門へ突入中…']);
+  loading([INTRO_LINE[S.mood] || 'ミッション開始…', '第1関門へ突入中…'], vsHTML('4人のエクストリーマーズ', '4人のエクストリーマーズ', esc(S.task)));
   try {
     const d = await ask(GM, `究極の課題：${S.task}\n\n${teamText()}\n\n${STAGE_SPEC(1)}\n\n出力形式：${OPT_SCHEMA}`, 3000);
     S.scene = d; S.stage = 0; showStage();
@@ -478,7 +513,7 @@ function rollFor(p) {
 async function narrate() {
   const { rs, win } = S.last;
   const final = S.stage === STAGES - 1;
-  loading(actionLines(rs, final));
+  loading(actionLines(rs, final), vsHTML(rs[0].ex.job, rs[1].ex.job, `${esc(S.names[0])} ${S.scores[0]}点　―　${S.scores[1]}点 ${esc(S.names[1])}`));
   const base = `究極の課題：${S.task}\n\n${teamText()}\n\nこれまで：\n${historyText()}\n\n今回の場面：${S.scene.scene}\n\n判定結果（サイコロで決定済み。成功と失敗を絶対に入れ替えない。忖度しない。妨害・共闘・裏切りなど相手との駆け引きも物語に描く）：\n${outcomeText(rs[0])}\n${outcomeText(rs[1])}`;
   const spec = final
     ? `\n\n両チームの結果を書き、最後に決着を書きます。勝者はチーム${win.w ? 'B' : 'A'}（${S.names[win.w]}）で確定しています（決め手：${win.how}）。勝者を変えないこと。
@@ -576,6 +611,61 @@ function showLogDetail(i) {
 }
 
 
+
+/* ---------- 走る棒人間（読み込み画面） ---------- */
+function figure(P, acc, eyeOn = true) {
+  const lines = [[P.n, P.hip], [P.n, P.le, P.lh], [P.n, P.re, P.rh], [P.hip, P.lk, P.lf], [P.hip, P.rk, P.rf]]
+    .map((pts) => `M${pts.map((q) => q.join(',')).join(' L')}`).join(' ');
+  const [hx, hy] = P.h;
+  let extra = '';
+  if (acc === 'band') extra = `<path d="M${hx - 15},${hy - 6} L${hx + 15},${hy - 6}" stroke="#E63322" stroke-width="6"/><path d="M${hx + 14},${hy - 6} q14,-6 22,2 M${hx + 14},${hy - 4} q12,4 18,12" stroke="#E63322" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+  if (acc === 'cap') extra = `<path d="M${hx - 16},${hy - 2} A16,16 0 0 1 ${hx + 16},${hy - 2} Z" fill="#3EA8FF"/><path d="M${hx - 16},${hy - 4} L${hx - 30},${hy - 1}" stroke="#3EA8FF" stroke-width="5" stroke-linecap="round"/>`;
+  const eye = eyeOn ? `<path d="M${hx - 13},${hy + 1} l9,2 l-8,2 z" fill="#fff"/>` : '';
+  return `<g stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="${lines}" stroke="#fff" stroke-width="15"/><circle cx="${hx}" cy="${hy}" r="18" fill="#fff"/><path d="${lines}" stroke="#111" stroke-width="9"/><circle cx="${hx}" cy="${hy}" r="15" fill="#111"/></g>${extra}${eye}`;
+}
+const RUN = [ // 左向きに走る4コマ
+  { h: [40, 30], n: [46, 48], hip: [58, 90], le: [30, 60], lh: [20, 46], re: [66, 66], rh: [74, 84], lk: [40, 108], lf: [24, 128], rk: [74, 112], rf: [92, 140] },
+  { h: [40, 32], n: [46, 50], hip: [58, 92], le: [40, 70], lh: [34, 88], re: [62, 64], rh: [72, 50], lk: [50, 118], lf: [50, 146], rk: [66, 118], rf: [80, 132] },
+  { h: [40, 30], n: [46, 48], hip: [58, 90], le: [64, 64], lh: [76, 80], re: [32, 60], rh: [22, 46], lk: [72, 112], lf: [90, 140], rk: [42, 108], rf: [26, 128] },
+  { h: [40, 32], n: [46, 50], hip: [58, 92], le: [62, 64], lh: [72, 50], re: [40, 70], rh: [34, 88], lk: [66, 118], lf: [80, 132], rk: [50, 118], rf: [50, 146] },
+];
+function runnerSVG(n) {
+  const one = (acc, dx, delay) => `<g transform="translate(${dx},0)">${RUN.map((P, k) => `<g class="rf" style="animation-delay:${-(0.48 - k * 0.12 + delay).toFixed(2)}s">${figure(P, acc)}</g>`).join('')}</g>`;
+  return `<svg viewBox="0 0 ${n === 2 ? 260 : 120} 150" class="runnerSvg" aria-hidden="true">${n === 2 ? one('band', 10, 0) + one('cap', 140, 0.24) : one('band', 10, 0)}</svg>`;
+}
+
+/* ---------- 待ち時間ミニゲーム：標的タップ ---------- */
+let miniTimer = null, miniScore = 0;
+function miniBest() { try { return +localStorage.getItem('ext_mini_best') || 0; } catch { return 0; } }
+function miniReset() {
+  clearInterval(miniTimer); miniTimer = null; miniScore = 0;
+  $('#miniField').innerHTML = ''; $('#miniField').hidden = true;
+  $('#miniStart').hidden = false;
+  $('#miniScore').textContent = `ベスト ${miniBest()}点`;
+}
+function miniStart() {
+  $('#miniStart').hidden = true;
+  const field = $('#miniField'); field.hidden = false; field.innerHTML = '';
+  miniScore = 0;
+  const upd = () => { $('#miniScore').textContent = `${miniScore}点（ベスト ${miniBest()}点）`; };
+  upd();
+  miniTimer = setInterval(() => {
+    if (!$('#loading').classList.contains('active')) return miniReset();
+    const b = document.createElement('button');
+    b.className = 'target'; b.type = 'button'; b.setAttribute('aria-label', '標的');
+    const w = field.clientWidth - 52, h = field.clientHeight - 52;
+    b.style.left = `${rnd(Math.max(1, w))}px`; b.style.top = `${rnd(Math.max(1, h))}px`;
+    const life = Math.max(550, 1000 - miniScore * 15);
+    b.onclick = (e) => {
+      e.stopPropagation(); b.remove(); miniScore++;
+      if (miniScore > miniBest()) { try { localStorage.setItem('ext_mini_best', miniScore); } catch {} }
+      Sound.sfx('ok'); upd();
+    };
+    field.appendChild(b);
+    setTimeout(() => b.remove(), life);
+  }, 700);
+}
+
 /* ---------- 今日のエクストリーマー ---------- */
 const BUILTIN_PEOPLE = [
   { income: '720万円', job: '歯科技工士', hobby: '盆栽', skill: '10km先の匂いを嗅ぎ分ける', ath: 2 },
@@ -666,6 +756,7 @@ $('#saveSettings').onclick = () => {
   refreshKeyNote(); toast('保存しました'); show('home');
 };
 $('#retryBtn').onclick = () => retryFn && retryFn();
+$('#miniStart').onclick = miniStart;
 $('#beginBtn').onclick = firstStage;
 $('#againBtn').onclick = () => startGame(S.mode);
 $('#bgmVol').oninput = (e) => Sound.setVol('bgm', e.target.value / 100);
@@ -680,7 +771,7 @@ $('#muteBtn').onclick = () => { Sound.toggle(); paintMute(); };
 paintMute();
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button');
-  if (b && !['rollBtn', 'muteBtn'].includes(b.id)) Sound.sfx('click');
+  if (b && !['rollBtn', 'muteBtn'].includes(b.id) && !b.classList.contains('target')) Sound.sfx('click');
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshQuota(); });
 refreshKeyNote();

@@ -68,8 +68,15 @@
   </section>
 
   <section id="loading" class="screen">
-    <div class="spinner" aria-hidden="true"></div>
-    <p class="loadingText" id="loadingText">準備中…</p>
+    <div id="loadVs"></div>
+    <div class="runner" id="runner"></div>
+    <p class="loadingText" id="loadingText" aria-live="polite">準備中…</p>
+    <div class="tipBox"><span class="tipLab">TIPS</span><p id="loadTip"></p></div>
+    <div class="mini">
+      <button class="btn" id="miniStart" type="button">待ち時間ミニゲーム：標的を撃ち抜け</button>
+      <div class="miniField" id="miniField" hidden></div>
+      <p class="miniScore" id="miniScore"></p>
+    </div>
   </section>
 
   <section id="error" class="screen">

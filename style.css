@@ -39,7 +39,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 #handoff{justify-content:center;min-height:70vh;text-align:center}
 #handoff .kicker{text-align:center}
 
-.draftHead{display:flex;justify-content:space-between;align-items:baseline}
+.draftHead{display:flex;justify-content:space-between;align-items:baseline;padding-right:56px}
 .who{color:var(--muted);font-size:14px;margin:0}
 .timer{height:10px;border-radius:5px;background:var(--line);overflow:hidden}
 .bar{height:100%;width:100%;background:var(--yellow);transform-origin:left}
@@ -121,6 +121,31 @@ details.team[open] summary{margin-bottom:8px}
 .todayRow{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:center}
 .stick{width:96px;height:140px}
 .todayProf{min-width:0}
+#loading{padding-top:48px}
+.vsRow{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.vsSide{border:2px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--panel);min-width:0}
+.vsSide span{display:block;font-size:12px;color:var(--muted)}
+.vsSide b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vsSide.a{border-color:#7a2a26}.vsSide.b{border-color:#21507e;text-align:right}
+.vsMark{font-family:"Dela Gothic One",system-ui,sans-serif;color:var(--yellow);font-size:22px}
+.vsSub{margin:8px 0 0;text-align:center;color:var(--muted);font-size:13px;line-height:1.5}
+.runner{height:150px;border-radius:14px;overflow:hidden;display:flex;justify-content:center;
+  background:repeating-linear-gradient(90deg, rgba(62,168,255,.18) 0 2px, transparent 2px 46px), linear-gradient(#141B33,#0B1020);
+  background-size:48px 100%,100% 100%;animation:scroll .35s linear infinite}
+@keyframes scroll{to{background-position:48px 0,0 0}}
+.runnerSvg{height:150px}
+.rf{opacity:0;animation:frame .48s steps(1) infinite}
+@keyframes frame{0%{opacity:1}25%{opacity:0}100%{opacity:0}}
+.loadingText{font-weight:800;color:var(--text);font-size:17px;min-height:26px;margin:0}
+.tipBox{display:flex;gap:10px;align-items:flex-start;border:1px dashed var(--line);border-radius:12px;padding:10px 12px}
+.tipLab{flex:none;background:var(--yellow);color:#111;font-weight:900;font-size:11px;border-radius:6px;padding:2px 6px;margin-top:2px}
+.tipBox p{margin:0;font-size:14px;line-height:1.6;color:var(--muted)}
+.mini{display:flex;flex-direction:column;gap:8px}
+.miniField{position:relative;height:200px;border:2px solid var(--line);border-radius:14px;background:#0F1530;overflow:hidden;touch-action:manipulation}
+.target{position:absolute;width:52px;height:52px;border-radius:50%;border:0;padding:0;cursor:pointer;
+  background:radial-gradient(circle,#fff 0 18%,#E63322 19% 38%,#fff 39% 58%,#E63322 59% 100%);animation:pop .15s ease-out}
+@keyframes pop{from{transform:scale(.3)}to{transform:scale(1)}}
+.miniScore{margin:0;text-align:center;font-weight:800;color:var(--yellow)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
   background:var(--red);color:#fff;font-weight:800;padding:10px 18px;border-radius:999px;opacity:0;transition:.25s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}

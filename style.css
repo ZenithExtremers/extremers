@@ -12,7 +12,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 
 .logo{width:140px;height:140px;align-self:center;margin-top:24px}
 .title,.h2,.winner{font-family:"Dela Gothic One",system-ui,sans-serif;font-weight:400;margin:0}
-.title{font-size:34px;text-align:center;letter-spacing:.02em}
+.title{font-size:40px;text-align:center;letter-spacing:.06em}
 .sub{text-align:center;color:var(--muted);margin:0}
 .h2{font-size:24px}
 .h2.big{font-size:30px;text-align:center}

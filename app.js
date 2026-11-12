@@ -3,7 +3,12 @@
 
 const $ = (s) => document.querySelector(s);
 const ROUNDS = 4, PICK_MS = 10000, STAGES = 3, STAGE_WEIGHT = [30, 30, 40];
-const TASK_TYPES = ['潜入する', '守り抜く', '騒ぎを起こす', '作り上げる', '逃げ切る', '壊す', '勝負に勝つ', '救出する', '説得する', '盗み出す', '隠し通す', '運ぶ'];
+// ハラハラ系を多めに（7割）。標的や組織はすべて架空
+const TASK_HOT = ['架空の悪の大物を暗殺する', '命を狙われた要人を守り抜く', '難攻不落の監獄から脱獄する', '仕掛けられた巨大爆弾を止める', '悪の組織の金庫から奪い去る', '人質を救出する', '仲間に紛れた裏切り者を暴いて始末する', '敵の秘密兵器を破壊する', '凶悪な追っ手から逃げ切る', '黒幕の正体を突き止めて捕らえる'];
+const TASK_MILD = ['潜入する', '騒ぎを起こす', '作り上げる', '勝負に勝つ', '説得する', '隠し通す', '運ぶ'];
+// 対戦相手との駆け引き
+const KIND = { normal: 'normal', sabotage: 'sabotage', coop: 'coop' };
+const SABOTAGE_HIT = 25, SABOTAGE_COST = 10, COOP_BOTH = 20, BETRAY_BONUS = 10;
 const APT_W = { fit: 6, stretch: 3, none: 1 };
 const APT_RATE = { fit: 80, stretch: 50, none: 20 };
 const OUT_CHANCE = 30;
@@ -73,7 +78,10 @@ async function ask(system, user, maxTokens = 4000) {
     throw new Error(`API エラー（${res.status}）：${t.slice(0, 300)}`);
   }
   const j = await res.json();
-  const txt = (j.candidates?.[0]?.content?.parts || []).map((p) => (p.thought ? '' : p.text || '')).join('');
+  const cand = j.candidates?.[0];
+  if (!cand || cand.finishReason === 'SAFETY' || cand.finishReason === 'PROHIBITED_CONTENT' || j.promptFeedback?.blockReason)
+    throw new Error('AIが内容を出せませんでした（安全フィルター）。「もう一度」を押すと作り直します。');
+  const txt = (cand.content?.parts || []).map((p) => (p.thought ? '' : p.text || '')).join('');
   const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
   if (a < 0 || b < 0) throw new Error('AIの返答を読み取れませんでした。');
   return JSON.parse(txt.slice(a, b + 1));
@@ -94,7 +102,11 @@ function setupPrompt(type) {
 - 運動神経 ath は1〜5の整数。偏らせない
 - 実在の人物、有名キャラクター、子どもは使わない
 
-【究極の課題】タイプ「${type}」の究極の課題を1文で作ります。人物の能力は考えずに作り、スケールが大きく、ばかばかしく、2チームが同時に挑めるものにします。具体的な実行手順は書きません。
+【究極の課題】タイプ「${type}」のミッションを1文で作ります。
+- 2チームが同じ舞台でライバルとして同時に挑み、先にやり遂げたほうが勝つ形にする
+- 命がけの緊迫感があるハラハラするミッションにする。ユーモアは少しだけ
+- 標的・組織・場所の名前はすべて架空にする。実在の人物・団体・事件は使わない
+- 人物の能力は考えずに作る。具体的な実行手順や残酷な描写は書かない
 
 出力形式：
 {"task":"課題の1文","players":[ [ [人物×5], [人物×5], [人物×5], [人物×5] ], [ 同じく4巡ぶん ] ]}
@@ -112,12 +124,17 @@ function teamText() {
 function historyText() {
   return S.history.length ? S.history.map((h, i) => `第${i + 1}関門：${h}`).join('\n') : 'まだなし';
 }
-const STAGE_SPEC = (n) => `第${n}関門（全${STAGES}関門。第${STAGES}関門が最終関門）の場面を作ります。両チームが同じ場面に挑みます。
-- scene：場面の説明2〜3文。これまでの流れを引き継ぐ
-- options：対処の「方針」を4つ。label は12字以内、detail は35字以内。誰がやるかは書かない。「正面突破」「だます」「味方に引き込む」「力でねじ伏せる」「避けて回り道」など、方針そのものが違うものにする
+const STAGE_SPEC = (n) => `第${n}関門（全${STAGES}関門。第${STAGES}関門が最終関門）の場面を作ります。
+- 両チームは同じ場所にいて、互いの姿が見えるライバル同士。場面には必ず相手チームの存在や動きを絡める
+- 関門の種類は毎回変える：追跡戦、乱戦、罠、謎解き、交渉、災害や崩落、裏切り、時間切れ寸前、標的との対決など。「警備や見張りをくぐり抜ける」場面は全3関門で多くても1回
+- scene：場面の説明2〜3文。これまでの流れを引き継ぎ、緊迫感を出す
+- options：対処の「方針」を4つ。label は12字以内、detail は35字以内。誰がやるかは書かない
+  - kind "normal" を2つ：課題そのものに挑む方針。方針どうしは中身をはっきり変える（力ずく、だます、頭脳、回り道など）
+  - kind "sabotage" を1つ：相手チームの邪魔をする方針
+  - kind "coop" を1つ：相手チームに一時休戦・共闘を持ちかける方針
 - 各 option に、退場していない全メンバーID（A1〜A4、B1〜B4）について、その方針を実行するときの適性 apt を付ける。fit＝特技がぴったり、stretch＝特技・趣味・職業のどれかをこじつけて使える、none＝無関係。1つの方針でfitは多くても2人まで
 - physical：その方針が主に体を使うなら true`;
-const OPT_SCHEMA = '{"scene":"…","options":[{"label":"…","detail":"…","apt":{"A1":"fit","A2":"none",…},"physical":false}, …4つ]}';
+const OPT_SCHEMA = '{"scene":"…","options":[{"label":"…","detail":"…","kind":"normal","apt":{"A1":"fit","A2":"none",…},"physical":false}, …4つ]}';
 
 /* ---------- ゲーム開始・ドラフト ---------- */
 function startGame(mode) {
@@ -132,7 +149,8 @@ function startGame(mode) {
 async function doSetup() {
   loading('人物と究極の課題を用意しています…');
   try {
-    const type = TASK_TYPES[rnd(TASK_TYPES.length) - 1];
+    const pool = rnd(10) <= 7 ? TASK_HOT : TASK_MILD;
+    const type = pool[rnd(pool.length) - 1];
     const d = await ask(GM, setupPrompt(type), 7000);
     if (!d.players || d.players.length < 2) throw new Error('人物データが足りません。');
     S.pools = d.players; S.task = d.task;
@@ -248,7 +266,8 @@ function chooseFor(p) {
     S.scene.options.forEach((o, i) => {
       const b = document.createElement('button');
       b.className = 'btn option';
-      b.innerHTML = `<b>${esc(o.label)}</b><span>${esc(o.detail)}</span>`;
+      const tag = o.kind === KIND.sabotage ? '<em class="tag sab">妨害</em>' : o.kind === KIND.coop ? '<em class="tag coop">共闘</em>' : '';
+      b.innerHTML = `<b>${tag}${esc(o.label)}</b><span>${esc(o.detail)}</span>`;
       b.onclick = () => { S.choice[p] = i; chooseFor(p + 1); };
       box.appendChild(b);
     });
@@ -257,6 +276,7 @@ function chooseFor(p) {
   if (S.mode === '2p') handoff(S.stage === STAGES - 1 ? '最終関門' : `第${S.stage + 1}関門`, `${S.names[p]}の番`, '相手に見えないように受け取ってください。', render);
   else render();
 }
+function kindOf(p) { const k = S.scene.options[S.choice[p]]?.kind; return KIND[k] ? k : KIND.normal; }
 function active(p) { return S.teams[p].filter((m) => !m.out); }
 function cpuChoice(p) { // 自チームの適性が高い方針を少し選びやすく
   const opts = S.scene.options.map((o, i) => ({ i, w: 1 + active(p).reduce((t, m) => t + ({ fit: 3, stretch: 1, none: 0 }[o.apt?.[m.id]] ?? 0), 0) }));
@@ -269,9 +289,15 @@ function prepTeam(p) {
   const aptOf = (m) => (APT_W[o.apt?.[m.id]] ? o.apt[m.id] : 'none');
   const ex = pickWeighted(members, (m) => APT_W[aptOf(m)]);
   const apt = aptOf(ex);
-  let rate = APT_RATE[apt] + (o.physical ? (ex.ath - 3) * 10 : 0);
-  rate = Math.max(5, Math.min(95, rate));
-  return { p, label: o.label, detail: o.detail, ex, apt, rate, canOut: S.stage < STAGES - 1 && members.length > 1 };
+  const base = APT_RATE[apt] + (o.physical ? (ex.ath - 3) * 10 : 0);
+  const mine = kindOf(p), theirs = kindOf(1 - p), mods = [];
+  if (mine === KIND.sabotage) mods.push(['妨害に人手を割いた', -SABOTAGE_COST]);
+  if (theirs === KIND.sabotage) mods.push(['相手チームの妨害', -SABOTAGE_HIT]);
+  if (mine === KIND.coop && theirs === KIND.coop) mods.push(['共闘成立', +COOP_BOTH]);
+  if (mine === KIND.sabotage && theirs === KIND.coop) mods.push(['共闘の申し出を逆手に取った', +BETRAY_BONUS]);
+  if (mine === KIND.coop && theirs === KIND.normal) mods.push(['共闘を断られた', 0]);
+  const rate = Math.max(5, Math.min(95, base + mods.reduce((t, m) => t + m[1], 0)));
+  return { p, label: o.label, detail: o.detail, kind: mine, ex, apt, base, mods, rate, canOut: S.stage < STAGES - 1 && members.length > 1 };
 }
 /* 出た目から成否と得点を決める。成功は配点の60〜100%、失敗は0〜30%（惜しいほど多い） */
 function finishTeam(r, roll) {
@@ -289,7 +315,8 @@ function finishTeam(r, roll) {
 }
 function outcomeText(r) {
   const m = r.ex;
-  return `チーム${r.p ? 'B' : 'A'}（${S.names[r.p]}）：方針「${r.label}」（${r.detail}）。実行したのは${m.id}の${m.job}（趣味：${m.hobby}／特技：${m.skill}／運動神経${m.ath}）。判定は【${r.grade}】${r.out ? '。失敗の結果、この人物は退場' : ''}。`;
+  const inter = r.mods.length ? `相手との駆け引き：${r.mods.map((x) => x[0]).join('、')}。` : '';
+  return `チーム${r.p ? 'B' : 'A'}（${S.names[r.p]}）：方針「${r.label}」（${r.detail}、種類：${{ normal: '課題に挑む', sabotage: '相手を妨害', coop: '相手に共闘を持ちかける' }[r.kind]}）。${inter}実行したのは${m.id}の${m.job}（趣味：${m.hobby}／特技：${m.skill}／運動神経${m.ath}）。判定は【${r.grade}】${r.out ? '。失敗の結果、この人物は退場' : ''}。`;
 }
 function decideWinner() {
   if (S.scores[0] !== S.scores[1]) return { w: S.scores[0] > S.scores[1] ? 0 : 1, how: '得点' };
@@ -317,6 +344,7 @@ function rollFor(p) {
     $('#rollPlan').textContent = `作戦：${r.label}`;
     $('#rollWho').innerHTML = `<p class="note" style="margin:0 0 6px">実行するのは…</p>${cardHTML(m)}`;
     $('#rollLine').textContent = `${r.rate}以下で成功`;
+    $('#rollMods').innerHTML = r.mods.map(([t, v]) => `<span>${esc(t)}${v ? `（${v > 0 ? '+' : '−'}${Math.abs(v)}）` : ''}</span>`).join('');
     const face = $('#dieFace'), verdict = $('#rollVerdict'), btn = $('#rollBtn');
     face.textContent = '?'; face.classList.remove('spin'); verdict.textContent = ''; verdict.className = 'rollVerdict';
     let rolled = false;
@@ -347,7 +375,7 @@ async function narrate() {
   const { rs, win } = S.last;
   const final = S.stage === STAGES - 1;
   loading(final ? '決着を書いています…' : '結果を書いています…');
-  const base = `究極の課題：${S.task}\n\n${teamText()}\n\nこれまで：\n${historyText()}\n\n今回の場面：${S.scene.scene}\n\n判定結果（サイコロで決定済み。成功と失敗を絶対に入れ替えない。忖度しない）：\n${outcomeText(rs[0])}\n${outcomeText(rs[1])}`;
+  const base = `究極の課題：${S.task}\n\n${teamText()}\n\nこれまで：\n${historyText()}\n\n今回の場面：${S.scene.scene}\n\n判定結果（サイコロで決定済み。成功と失敗を絶対に入れ替えない。忖度しない。妨害・共闘・裏切りなど相手との駆け引きも物語に描く）：\n${outcomeText(rs[0])}\n${outcomeText(rs[1])}`;
   const spec = final
     ? `\n\n両チームの結果を書き、最後に決着を書きます。勝者はチーム${win.w ? 'B' : 'A'}（${S.names[win.w]}）で確定しています（決め手：${win.how}）。勝者を変えないこと。
 出力形式：{"resultA":"チームAの結果2〜4文","resultB":"チームBの結果2〜4文","epilogue":"決着の場面2〜3文"}`

@@ -102,6 +102,7 @@ const store = {
   set model(v) { try { localStorage.setItem('ext_gmodel', v); } catch {} },
 };
 function refreshKeyNote() {
+  if (typeof renderToday === 'function') renderToday();
   $('#keyNote').textContent = store.key ? '' : 'はじめに「設定」でGemini APIキー（無料）を入れてください。';
   refreshQuota();
 }
@@ -572,6 +573,74 @@ function showLogDetail(i) {
       <div class="dice">実行：${esc(r.job)}｜🎲${r.roll}（${r.rate}以下で成功）→ <span class="${r.ok ? 'ok' : 'ng'}">${esc(r.grade)}</span> +${r.pts}点${r.out ? '｜⚠️退場' : ''}</div><p>${esc(r.text)}</p></div>`).join('')}` : '').join('')}
     ${g.epilogue ? `<p class="kicker">決着</p><p class="scene">${esc(g.epilogue)}</p>` : ''}`;
   show('logView');
+}
+
+
+/* ---------- 今日のエクストリーマー ---------- */
+const BUILTIN_PEOPLE = [
+  { income: '720万円', job: '歯科技工士', hobby: '盆栽', skill: '10km先の匂いを嗅ぎ分ける', ath: 2 },
+  { income: '0円', job: '家出中の大学生', hobby: '天体観測', skill: '素手で鉄格子を曲げる', ath: 4 },
+  { income: '4億円', job: '不動産王', hobby: 'セミの抜け殻集め', skill: 'どんな鍵も針金で開ける', ath: 1 },
+  { income: '310万円', job: 'バスの運転手', hobby: 'フェンシング', skill: '動物の言葉が分かる', ath: 4 },
+  { income: '950万円', job: '裁判官', hobby: '着ぐるみ集め', skill: '水中で10分息が続く', ath: 3 },
+  { income: '180万円', job: '駄菓子屋の店主', hobby: '競技ドローン', skill: '人の声を完璧にまねる', ath: 2 },
+  { income: '2800万円', job: '演歌歌手', hobby: 'プログラミング', skill: '3日間寝なくても平気', ath: 2 },
+  { income: '430万円', job: '救急救命士', hobby: '腹話術', skill: '壁を素手で垂直に登る', ath: 4 },
+  { income: '70万円', job: '路上の似顔絵描き', hobby: '重量挙げ', skill: '嘘を一瞬で見抜く', ath: 5 },
+  { income: '1300万円', job: 'ソムリエ', hobby: 'ロデオ', skill: 'どんな機械も直せる', ath: 4 },
+  { income: '260万円', job: '図書館の警備員', hobby: 'ボードゲーム', skill: '火の中でも熱くない', ath: 3 },
+  { income: '5000万円', job: '通販番組の司会者', hobby: '洞窟探検', skill: '誰とでも10分で親友', ath: 3 },
+  { income: '390万円', job: '養蜂家', hobby: 'ストリートダンス', skill: '1km先の的に石を当てる', ath: 3 },
+  { income: '8億円', job: '石油会社の跡取り', hobby: '昆虫食', skill: '気配を完全に消す', ath: 1 },
+  { income: '550万円', job: '葬儀屋', hobby: 'お笑いライブ通い', skill: '車を片手で持ち上げる', ath: 2 },
+  { income: '200万円', job: 'ピザの配達員', hobby: '古文書の解読', skill: '高所から落ちても無傷', ath: 5 },
+  { income: '1億円', job: 'プロ雀士', hobby: 'ロッククライミング', skill: 'ウソ泣きで同情させる', ath: 4 },
+  { income: '340万円', job: '灯台守', hobby: 'ベリーダンス', skill: '雷の落ちる場所を予知', ath: 2 },
+  { income: '880万円', job: '鍵屋', hobby: 'オペラ鑑賞', skill: '2日間まばたきしない', ath: 3 },
+];
+function hashStr(t) { let h = 2166136261; for (const c of t) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function seeded(seed) { let x = seed || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return ((x >>> 0) % 10000) / 10000; }; }
+// 白フチ付きの棒人間（アイコンと同じ描き方）。ポーズと小物は日替わり
+function stickSVG(seed) {
+  const r = seeded(seed);
+  const POSES = [
+    { h: [52, 30], n: [54, 48], hip: [58, 92], le: [36, 62], lh: [22, 50], re: [74, 66], rh: [86, 52], lk: [44, 118], lf: [34, 146], rk: [72, 116], rf: [84, 146] }, // 構え
+    { h: [48, 30], n: [52, 48], hip: [60, 90], le: [34, 56], lh: [18, 40], re: [72, 70], rh: [64, 86], lk: [40, 112], lf: [22, 140], rk: [78, 116], rf: [96, 144] }, // 走り
+    { h: [54, 28], n: [56, 46], hip: [58, 92], le: [40, 66], lh: [50, 82], re: [74, 66], rh: [64, 82], lk: [48, 120], lf: [44, 148], rk: [68, 120], rf: [76, 148] }, // 腕組み
+    { h: [50, 32], n: [54, 50], hip: [60, 94], le: [34, 50], lh: [24, 28], re: [76, 60], rh: [92, 46], lk: [46, 120], lf: [40, 148], rk: [74, 118], rf: [90, 140] }, // 指さし
+    { h: [56, 40], n: [56, 58], hip: [62, 98], le: [38, 70], lh: [26, 60], re: [78, 74], rh: [90, 66], lk: [40, 112], lf: [30, 148], rk: [84, 118], rf: [92, 148] }, // 低い構え
+  ];
+  const P = POSES[Math.floor(r() * POSES.length)];
+  const acc = ['band', 'glasses', 'cap', 'scarf', 'none'][Math.floor(r() * 5)];
+  const lines = [[P.n, P.hip], [P.n, P.le, P.lh], [P.n, P.re, P.rh], [P.hip, P.lk, P.lf], [P.hip, P.rk, P.rf]]
+    .map((pts) => `M${pts.map((q) => q.join(',')).join(' L')}`).join(' ');
+  const [hx, hy] = P.h;
+  let extra = '';
+  if (acc === 'band') extra = `<path d="M${hx - 15},${hy - 6} L${hx + 15},${hy - 6}" stroke="#E63322" stroke-width="6"/><path d="M${hx + 14},${hy - 6} q14,-6 22,2 M${hx + 14},${hy - 4} q12,4 18,12" stroke="#E63322" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+  if (acc === 'glasses') extra = `<circle cx="${hx - 9}" cy="${hy + 1}" r="5" fill="#111" stroke="#fff" stroke-width="2"/><circle cx="${hx + 3}" cy="${hy + 1}" r="5" fill="#111" stroke="#fff" stroke-width="2"/>`;
+  if (acc === 'cap') extra = `<path d="M${hx - 16},${hy - 2} A16,16 0 0 1 ${hx + 16},${hy - 2} Z" fill="#3EA8FF"/><path d="M${hx - 16},${hy - 4} L${hx - 30},${hy - 1}" stroke="#3EA8FF" stroke-width="5" stroke-linecap="round"/>`;
+  if (acc === 'scarf') extra = `<path d="M${P.n[0]},${P.n[1]} q20,-2 34,-12 M${P.n[0]},${P.n[1] + 2} q18,6 30,4" stroke="#E63322" stroke-width="6" fill="none" stroke-linecap="round"/>`;
+  const eye = acc === 'glasses' ? '' : `<path d="M${hx - 13},${hy + 1} l9,2 l-8,2 z" fill="#fff"/>`;
+  return `<svg viewBox="0 0 110 160" class="stick" aria-hidden="true">
+    <g stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="${lines}" stroke="#fff" stroke-width="15"/><circle cx="${hx}" cy="${hy}" r="18" fill="#fff"/>
+      <path d="${lines}" stroke="#111" stroke-width="9"/><circle cx="${hx}" cy="${hy}" r="15" fill="#111"/>
+    </g>${extra}${eye}</svg>`;
+}
+function todaysExtremer() {
+  const seen = new Map();
+  loadLogs().forEach((g) => (g.teams || []).flat().forEach((m) => m?.job && seen.set(m.job, m)));
+  BUILTIN_PEOPLE.forEach((m) => seen.has(m.job) || seen.set(m.job, m));
+  const pool = [...seen.values()];
+  const d = new Date(), key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const h = hashStr(key);
+  return { m: pool[h % pool.length], seed: h };
+}
+function renderToday() {
+  const box = $('#todayBox'); if (!box) return;
+  const { m, seed } = todaysExtremer();
+  box.innerHTML = `<p class="kicker">今日のエクストリーマー</p>
+    <div class="todayRow">${stickSVG(seed)}<div class="prof todayProf">${cardHTML(m)}</div></div>`;
 }
 
 /* ---------- 画面のつなぎ ---------- */

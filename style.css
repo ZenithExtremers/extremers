@@ -115,6 +115,12 @@ details.team[open] summary{margin-bottom:8px}
 .mute.off .on{display:none}
 .mute.off .offi{display:block}
 .field input[type=range]{min-height:auto;padding:0;accent-color:var(--yellow)}
+.today{border:2px solid var(--line);border-radius:16px;padding:14px;background:
+  repeating-conic-gradient(from 200deg at 0% 100%, rgba(62,168,255,.06) 0 4deg, transparent 4deg 9deg), var(--panel)}
+.today .kicker{margin-bottom:8px}
+.todayRow{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:center}
+.stick{width:96px;height:140px}
+.todayProf{min-width:0}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
   background:var(--red);color:#fff;font-weight:800;padding:10px 18px;border-radius:999px;opacity:0;transition:.25s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}

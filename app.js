@@ -2,7 +2,7 @@
 /* エクストリーマーズ — 4人チームで究極の課題に挑む対戦ゲーム */
 
 const $ = (s) => document.querySelector(s);
-const ROUNDS = 4, PICK_MS = 3000, STAGES = 3, STAGE_WEIGHT = [1, 1, 2];
+const ROUNDS = 4, PICK_MS = 3000, STAGES = 3, STAGE_WEIGHT = [30, 30, 40];
 const TASK_TYPES = ['潜入する', '守り抜く', '騒ぎを起こす', '作り上げる', '逃げ切る', '壊す', '勝負に勝つ', '救出する', '説得する', '盗み出す', '隠し通す', '運ぶ'];
 const APT_W = { fit: 6, stretch: 3, none: 1 };
 const APT_RATE = { fit: 80, stretch: 50, none: 20 };
@@ -124,7 +124,7 @@ function startGame(mode) {
   S = {
     mode, names: mode === 'cpu' ? ['あなた', 'CPU'] : ['プレイヤー1', 'プレイヤー2'],
     pools: null, task: '', teams: [[], []], round: 0, turn: 0,
-    stage: 0, scores: [0, 0], wins: [[], []], history: [], scene: null, choice: [null, null], last: null,
+    stage: 0, scores: [0, 0], stagePts: [[], []], history: [], scene: null, choice: [null, null], last: null,
   };
   doSetup();
 }
@@ -259,7 +259,8 @@ function cpuChoice(p) { // 自チームの適性が高い方針を少し選び�
   const opts = S.scene.options.map((o, i) => ({ i, w: 1 + active(p).reduce((t, m) => t + ({ fit: 3, stretch: 1, none: 0 }[o.apt?.[m.id]] ?? 0), 0) }));
   return pickWeighted(opts, (x) => x.w).i;
 }
-function resolveTeam(p) {
+/* 実行する人と成功ラインを決める（サイコロはまだ振らない） */
+function prepTeam(p) {
   const o = S.scene.options[S.choice[p]];
   const members = active(p);
   const aptOf = (m) => (APT_W[o.apt?.[m.id]] ? o.apt[m.id] : 'none');
@@ -267,32 +268,77 @@ function resolveTeam(p) {
   const apt = aptOf(ex);
   let rate = APT_RATE[apt] + (o.physical ? (ex.ath - 3) * 10 : 0);
   rate = Math.max(5, Math.min(95, rate));
-  const roll = rnd(100), ok = roll <= rate;
-  let out = false, outRoll = null;
-  if (!ok && S.stage < STAGES - 1 && members.length > 1) {
-    outRoll = rnd(100); out = outRoll <= OUT_CHANCE;
-    if (out) ex.out = true;
-  }
-  if (ok) { S.scores[p] += STAGE_WEIGHT[S.stage]; S.wins[p].push(S.stage); }
-  return { p, label: o.label, detail: o.detail, ex, apt, rate, roll, ok, out };
+  return { p, label: o.label, detail: o.detail, ex, apt, rate, canOut: S.stage < STAGES - 1 && members.length > 1 };
+}
+/* 出た目から成否と得点を決める。成功は配点の60〜100%、失敗は0〜30%（惜しいほど多い） */
+function finishTeam(r, roll) {
+  const w = STAGE_WEIGHT[S.stage];
+  r.roll = roll; r.ok = roll <= r.rate;
+  r.pts = r.ok
+    ? Math.round(w * (0.6 + 0.4 * (r.rate - roll + 1) / r.rate))
+    : Math.round(w * 0.3 * (1 - (roll - r.rate - 1) / Math.max(1, 100 - r.rate)));
+  r.out = false;
+  if (!r.ok && r.canOut && rnd(100) <= OUT_CHANCE) { r.out = true; r.ex.out = true; }
+  const margin = Math.abs(roll - r.rate);
+  r.grade = r.ok ? (margin >= 40 ? '大成功' : margin <= 8 ? 'ギリギリ成功' : '成功') : (margin <= 8 ? '惜しくも失敗' : margin >= 40 ? '大失敗' : '失敗');
+  S.scores[r.p] += r.pts; S.stagePts[r.p][S.stage] = r.pts;
+  return r;
 }
 function outcomeText(r) {
   const m = r.ex;
-  return `チーム${r.p ? 'B' : 'A'}（${S.names[r.p]}）：方針「${r.label}」（${r.detail}）。実行したのは${m.id}の${m.job}（趣味：${m.hobby}／特技：${m.skill}／運動神経${m.ath}）。判定は【${r.ok ? '成功' : '失敗'}】${r.out ? '。失敗の結果、この人物は退場' : ''}。`;
+  return `チーム${r.p ? 'B' : 'A'}（${S.names[r.p]}）：方針「${r.label}」（${r.detail}）。実行したのは${m.id}の${m.job}（趣味：${m.hobby}／特技：${m.skill}／運動神経${m.ath}）。判定は【${r.grade}】${r.out ? '。失敗の結果、この人物は退場' : ''}。`;
 }
 function decideWinner() {
   if (S.scores[0] !== S.scores[1]) return { w: S.scores[0] > S.scores[1] ? 0 : 1, how: '得点' };
-  const f0 = S.wins[0].includes(STAGES - 1), f1 = S.wins[1].includes(STAGES - 1);
-  if (f0 !== f1) return { w: f0 ? 0 : 1, how: '最終関門' };
-  const coin = rnd(2) - 1;
-  return { w: coin, how: 'コイントス', coin };
+  const f0 = S.stagePts[0][STAGES - 1] || 0, f1 = S.stagePts[1][STAGES - 1] || 0;
+  if (f0 !== f1) return { w: f0 > f1 ? 0 : 1, how: '最終関門' };
+  return { w: rnd(2) - 1, how: 'コイントス' };
 }
-async function resolveStage() {
-  if (!S.last || S.last.stage !== S.stage) {
-    S.last = { stage: S.stage, rs: [resolveTeam(0), resolveTeam(1)] };
+function resolveStage() {
+  if (S.last && S.last.stage === S.stage && S.last.done) return narrate();
+  S.last = { stage: S.stage, rs: [prepTeam(0), prepTeam(1)], done: false };
+  rollFor(0);
+}
+/* サイコロ画面：人間は自分でタップ、CPUは自動で振る */
+function rollFor(p) {
+  if (p > 1) {
+    S.last.done = true;
     if (S.stage === STAGES - 1) S.last.win = decideWinner();
+    return narrate();
   }
-  narrate();
+  const r = S.last.rs[p];
+  const go = () => {
+    const m = r.ex;
+    $('#rollKicker').textContent = S.stage === STAGES - 1 ? '最終関門' : `第${S.stage + 1}関門`;
+    $('#rollTitle').textContent = `${p ? '🟦' : '🟥'} ${S.names[p]}の判定`;
+    $('#rollPlan').textContent = `作戦：${r.label}`;
+    $('#rollWho').innerHTML = `実行するのは… <b>${esc(m.job)}</b><br>趣味：${esc(m.hobby)}｜特技：${esc(m.skill)}｜<span class="stars">${stars(m.ath)}</span>`;
+    $('#rollLine').textContent = `${r.rate}以下で成功`;
+    const face = $('#dieFace'), verdict = $('#rollVerdict'), btn = $('#rollBtn');
+    face.textContent = '?'; face.classList.remove('spin'); verdict.textContent = ''; verdict.className = 'rollVerdict';
+    let rolled = false;
+    const doRoll = () => {
+      if (rolled) return; rolled = true;
+      btn.disabled = true; btn.textContent = '…';
+      face.classList.add('spin');
+      const iv = setInterval(() => { face.textContent = rnd(100); }, 60);
+      setTimeout(() => {
+        clearInterval(iv); face.classList.remove('spin');
+        const roll = rnd(100);
+        finishTeam(r, roll);
+        face.textContent = roll;
+        verdict.textContent = `${r.grade}！ +${r.pts}点${r.out ? '（⚠️退場）' : ''}`;
+        verdict.classList.add(r.ok ? 'ok' : 'ng');
+        btn.disabled = false; btn.textContent = '次へ';
+        btn.onclick = () => rollFor(p + 1);
+        if (isCpu(p)) setTimeout(() => rollFor(p + 1), 1600);
+      }, 1100);
+    };
+    if (isCpu(p)) { btn.textContent = 'CPUが振っています'; btn.disabled = true; show('roll'); setTimeout(doRoll, 700); }
+    else { btn.textContent = 'サイコロを振る'; btn.disabled = false; btn.onclick = doRoll; show('roll'); }
+  };
+  if (S.mode === '2p') handoff(S.stage === STAGES - 1 ? '最終関門' : `第${S.stage + 1}関門`, `${S.names[p]}がサイコロを振る番`, '受け取ったら、自分でサイコロを振ってください。', go);
+  else go();
 }
 async function narrate() {
   const { rs, win } = S.last;
@@ -314,10 +360,10 @@ async function narrate() {
   } catch (e) { fail(e, narrate); }
 }
 function diceLine(r) {
-  return `<div class="dice">実行：${esc(r.ex.job)}｜🎲${r.roll}（${r.rate}以下で成功）→ <span class="${r.ok ? 'ok' : 'ng'}">${r.ok ? '成功' : '失敗'}</span>${r.out ? '｜⚠️退場' : ''}</div>`;
+  return `<div class="dice">実行：${esc(r.ex.job)}｜🎲${r.roll}（${r.rate}以下で成功）→ <span class="${r.ok ? 'ok' : 'ng'}">${r.grade}</span> +${r.pts}点${r.out ? '｜⚠️退場' : ''}</div>`;
 }
 function scoreHTML() {
-  return `<span>🟥 ${esc(S.names[0])} ${S.scores[0]}点</span><span>🟦 ${esc(S.names[1])} ${S.scores[1]}点</span>`;
+  return `<span>🟥 ${esc(S.names[0])} ${S.scores[0]}<small>/100</small></span><span>🟦 ${esc(S.names[1])} ${S.scores[1]}<small>/100</small></span>`;
 }
 function showResult(d) {
   const { rs, win } = S.last;
@@ -336,7 +382,7 @@ function showResult(d) {
   show('result');
 }
 function showFinal(win, epilogue) {
-  const how = win.how === 'コイントス' ? '（同点・最終関門も互角のためコイントス）' : win.how === '最終関門' ? '（同点・最終関門の成否で決着）' : '';
+  const how = win.how === 'コイントス' ? '（同点・最終関門も互角のためコイントス）' : win.how === '最終関門' ? '（同点・最終関門の得点で決着）' : '';
   $('#winnerText').textContent = `🏆 ${S.names[win.w]}の勝ち！`;
   $('#epilogueText').textContent = `${epilogue || ''}${how ? '\n' + how : ''}`;
   $('#finalScore').innerHTML = scoreHTML();

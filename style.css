@@ -97,6 +97,16 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 .tag.coop{background:var(--blue);color:#111}
 .quota{margin:0;text-align:center;font-weight:800;color:var(--yellow)}
 .quota.ng{color:#FF6B5C}
+details.team summary{font-weight:800;font-size:15px;cursor:pointer;list-style:none;padding:2px 0}
+details.team summary::-webkit-details-marker{display:none}
+details.team summary::after{content:"▼";float:right;color:var(--muted);font-size:12px}
+details.team:not([open]) summary::after{content:"▶"}
+details.team.a summary{color:#FF6B5C}
+details.team.b summary{color:var(--blue)}
+details.team[open] summary{margin-bottom:8px}
+#stageTeams{display:flex;flex-direction:column;gap:12px}
+.member.prof{position:relative}
+.outTag{position:absolute;right:0;top:8px;background:var(--red);color:#fff;font-size:11px;font-weight:800;border-radius:6px;padding:1px 6px;text-decoration:none}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
   background:var(--red);color:#fff;font-weight:800;padding:10px 18px;border-radius:999px;opacity:0;transition:.25s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}

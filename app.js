@@ -307,7 +307,10 @@ function chooseFor(p) {
     const last = S.stage === STAGES - 1;
     $('#stageKicker').textContent = last ? `最終関門（第${STAGES}関門）` : `第${S.stage + 1}関門`;
     $('#sceneText').textContent = S.scene.scene;
-    $('#stageWho').textContent = `${S.names[p]}の作戦は？`;
+    $('#stageWho').textContent = `${S.names[p]}の作戦は？（メンバーの能力は下に）`;
+    const teamBox = (q, open) => `<details class="team ${q ? 'b' : 'a'}"${open ? ' open' : ''}><summary>${q ? '🟦' : '🟥'} ${esc(S.names[q])}${q === p ? '（自分）' : '（相手）'}のエクストリーマーズ</summary>${
+      S.teams[q].map((m) => `<div class="member prof ${m.out ? 'out' : ''}">${cardHTML(m)}${m.out ? '<span class="outTag">退場</span>' : ''}</div>`).join('')}</details>`;
+    $('#stageTeams').innerHTML = teamBox(p, true) + teamBox(1 - p, false);
     const box = $('#optionsBox'); box.innerHTML = '';
     S.scene.options.forEach((o, i) => {
       const b = document.createElement('button');

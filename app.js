@@ -2,7 +2,7 @@
 /* エクストリーマーズ — 4人チームで究極の課題に挑む対戦ゲーム */
 
 const $ = (s) => document.querySelector(s);
-const ROUNDS = 4, PICK_MS = 3000, STAGES = 3, STAGE_WEIGHT = [30, 30, 40];
+const ROUNDS = 4, PICK_MS = 10000, STAGES = 3, STAGE_WEIGHT = [30, 30, 40];
 const TASK_TYPES = ['潜入する', '守り抜く', '騒ぎを起こす', '作り上げる', '逃げ切る', '壊す', '勝負に勝つ', '救出する', '説得する', '盗み出す', '隠し通す', '運ぶ'];
 const APT_W = { fit: 6, stretch: 3, none: 1 };
 const APT_RATE = { fit: 80, stretch: 50, none: 20 };
@@ -87,8 +87,9 @@ function setupPrompt(type) {
 【人物】2人のプレイヤーに、4巡ぶん、毎巡5人ずつの候補を作ります（合計40人）。
 - 全員別人。職業は40人で重複させない
 - 職業・趣味・特技の3つは互いに無関係にする。「趣味の延長の特技」「職業の延長の特技」「職業の延長の趣味」は禁止。ただし40人中4人ほどだけ、どれか1組が関連していてよい
-- 特技は超人的な体の能力ばかりにしない。運、知識、対人、感覚、変わった才能なども混ぜ、毎回バリエーションを変える。15字前後
+- 特技は超人的な体の能力ばかりにしない。運、知識、対人、感覚、変わった才能なども混ぜ、毎回バリエーションを変える
 - 趣味もありきたりなものに偏らせない
+- 文字数を必ず守る：職業は10字以内、趣味は10字以内、特技は14字以内。説明や補足、カッコ書きは付けない
 - 年収は0円から数億円までばらつかせ、「720万円」「4億円」のように書く
 - 運動神経 ath は1〜5の整数。偏らせない
 - 実在の人物、有名キャラクター、子どもは使わない
@@ -124,7 +125,7 @@ function startGame(mode) {
   S = {
     mode, names: mode === 'cpu' ? ['あなた', 'CPU'] : ['プレイヤー1', 'プレイヤー2'],
     pools: null, task: '', teams: [[], []], round: 0, turn: 0,
-    stage: 0, scores: [0, 0], stagePts: [[], []], history: [], scene: null, choice: [null, null], last: null,
+    stage: 0, scores: [0, 0], stagePts: [[], []], log: [], saved: false, history: [], scene: null, choice: [null, null], last: null,
   };
   doSetup();
 }
@@ -149,7 +150,7 @@ function nextDraft() {
     return advanceDraft();
   }
   handoff(`${S.round + 1}巡目`, `${S.names[p]}の番`,
-    S.mode === '2p' ? '相手に見えないように受け取ってください。押すと3秒のカウントが始まります。' : '押すと3秒のカウントが始まります。',
+    S.mode === '2p' ? '相手に見えないように受け取ってください。押すと10秒のカウントが始まります。' : '押すと10秒のカウントが始まります。',
     showDraft);
 }
 function handoff(kicker, title, note, next) {
@@ -160,9 +161,11 @@ function handoff(kicker, title, note, next) {
   show('handoff');
 }
 function cardHTML(m) {
-  return `<span class="income">${esc(m.income)}</span><div class="job">${esc(m.job)}</div>
-  <dl><dt>趣味</dt><dd>${esc(m.hobby)}</dd><dt>特技</dt><dd>${esc(m.skill)}</dd>
-  <dt>運動神経</dt><dd class="stars">${stars(Math.max(1, Math.min(5, +m.ath || 3)))}</dd></dl>`;
+  const ath = Math.max(1, Math.min(5, +m.ath || 3));
+  return `<div class="profHead"><span class="job">${esc(m.job)}</span><span class="income">${esc(m.income)}</span></div>
+  <div class="prow"><span class="lab">趣味</span><span class="val">${esc(m.hobby)}</span></div>
+  <div class="prow"><span class="lab">特技</span><span class="val">${esc(m.skill)}</span></div>
+  <div class="prow"><span class="lab">運動</span><span class="val stars">${stars(ath)}</span></div>`;
 }
 function showDraft() {
   const p = S.turn, cands = S.pools[p][S.round];
@@ -207,9 +210,9 @@ function advanceDraft() {
 }
 
 /* ---------- 公開 ---------- */
-function teamsHTML() {
-  return [0, 1].map((p) => `<div class="team ${p ? 'b' : 'a'}"><h3>${p ? '🟦' : '🟥'} ${esc(S.names[p])}</h3>${
-    S.teams[p].map((m) => `<div class="member ${m.out ? 'out' : ''}"><b>${esc(m.job)}</b>（${esc(m.income)}）<br>趣味：${esc(m.hobby)}｜特技：${esc(m.skill)}｜<span class="stars">${stars(m.ath)}</span></div>`).join('')
+function teamsHTML(G = S) {
+  return [0, 1].map((p) => `<div class="team ${p ? 'b' : 'a'}"><h3>${p ? '🟦' : '🟥'} ${esc(G.names[p])}</h3>${
+    G.teams[p].map((m) => `<div class="member prof ${m.out ? 'out' : ''}">${cardHTML(m)}</div>`).join('')
   }</div>`).join('');
 }
 function showReveal() {
@@ -312,7 +315,7 @@ function rollFor(p) {
     $('#rollKicker').textContent = S.stage === STAGES - 1 ? '最終関門' : `第${S.stage + 1}関門`;
     $('#rollTitle').textContent = `${p ? '🟦' : '🟥'} ${S.names[p]}の判定`;
     $('#rollPlan').textContent = `作戦：${r.label}`;
-    $('#rollWho').innerHTML = `実行するのは… <b>${esc(m.job)}</b><br>趣味：${esc(m.hobby)}｜特技：${esc(m.skill)}｜<span class="stars">${stars(m.ath)}</span>`;
+    $('#rollWho').innerHTML = `<p class="note" style="margin:0 0 6px">実行するのは…</p>${cardHTML(m)}`;
     $('#rollLine').textContent = `${r.rate}以下で成功`;
     const face = $('#dieFace'), verdict = $('#rollVerdict'), btn = $('#rollBtn');
     face.textContent = '?'; face.classList.remove('spin'); verdict.textContent = ''; verdict.className = 'rollVerdict';
@@ -371,6 +374,10 @@ function showResult(d) {
   $('#resultKicker').textContent = final ? '最終関門の結果' : `第${S.stage + 1}関門の結果`;
   $('#resultBox').innerHTML = rs.map((r) => `<div class="res ${r.p ? 'b' : 'a'}"><h3>${r.p ? '🟦' : '🟥'} ${esc(S.names[r.p])}：${esc(r.label)}</h3>${diceLine(r)}<p>${esc(r.p ? d.resultB : d.resultA)}</p></div>`).join('');
   $('#scoreBox').innerHTML = scoreHTML();
+  S.log[S.stage] = {
+    scene: S.scene.scene,
+    rs: rs.map((r) => ({ p: r.p, label: r.label, job: r.ex.job, roll: r.roll, rate: r.rate, grade: r.grade, ok: r.ok, pts: r.pts, out: r.out, text: r.p ? d.resultB : d.resultA })),
+  };
   const btn = $('#resultNext');
   if (final) {
     btn.textContent = '決着を見る';
@@ -386,7 +393,54 @@ function showFinal(win, epilogue) {
   $('#winnerText').textContent = `🏆 ${S.names[win.w]}の勝ち！`;
   $('#epilogueText').textContent = `${epilogue || ''}${how ? '\n' + how : ''}`;
   $('#finalScore').innerHTML = scoreHTML();
+  if (!S.saved) {
+    S.saved = true;
+    saveLog({
+      at: Date.now(), mode: S.mode, names: S.names, task: S.task, scores: S.scores, winner: win.w, how: win.how,
+      teams: S.teams.map((t) => t.map((m) => ({ job: m.job, income: m.income, hobby: m.hobby, skill: m.skill, ath: m.ath, out: m.out }))),
+      stages: S.log, epilogue: epilogue || '',
+    });
+  }
   show('final');
+}
+
+/* ---------- 対戦ログ ---------- */
+const LOG_KEY = 'ext_logs', LOG_MAX = 50;
+function loadLogs() { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; } }
+function saveLog(g) {
+  const logs = loadLogs(); logs.unshift(g);
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(logs.slice(0, LOG_MAX))); } catch {}
+}
+function fmtDate(t) {
+  const d = new Date(t), z = (n) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+function showLogs() {
+  const logs = loadLogs(), box = $('#logList');
+  box.innerHTML = logs.length ? '' : '<p class="note">まだ対戦の記録がありません。</p>';
+  logs.forEach((g, i) => {
+    const b = document.createElement('button');
+    b.className = 'btn option';
+    b.innerHTML = `<b>🏆 ${esc(g.names[g.winner])}の勝ち　${g.scores[0]} - ${g.scores[1]}</b><span>${fmtDate(g.at)}｜${g.mode === 'cpu' ? 'CPU戦' : '2人対戦'}<br>${esc(g.task)}</span>`;
+    b.onclick = () => showLogDetail(i);
+    box.appendChild(b);
+  });
+  show('logs');
+}
+function showLogDetail(i) {
+  const g = loadLogs()[i]; if (!g) return showLogs();
+  const stageName = (k) => (k === STAGES - 1 ? '最終関門' : `第${k + 1}関門`);
+  $('#logDetail').innerHTML = `
+    <p class="kicker">${fmtDate(g.at)}｜${g.mode === 'cpu' ? 'CPU戦' : '2人対戦'}</p>
+    <h2 class="winner">🏆 ${esc(g.names[g.winner])}の勝ち</h2>
+    <div class="score"><span>🟥 ${esc(g.names[0])} ${g.scores[0]}<small>/100</small></span><span>🟦 ${esc(g.names[1])} ${g.scores[1]}<small>/100</small></span></div>
+    <div class="taskBox"><p class="kicker">究極の課題</p><p class="task">${esc(g.task)}</p></div>
+    ${teamsHTML(g)}
+    ${(g.stages || []).map((st, k) => st ? `<p class="kicker">${stageName(k)}</p><p class="scene">${esc(st.scene)}</p>
+      ${st.rs.map((r) => `<div class="res ${r.p ? 'b' : 'a'}"><h3>${r.p ? '🟦' : '🟥'} ${esc(g.names[r.p])}：${esc(r.label)}</h3>
+      <div class="dice">実行：${esc(r.job)}｜🎲${r.roll}（${r.rate}以下で成功）→ <span class="${r.ok ? 'ok' : 'ng'}">${esc(r.grade)}</span> +${r.pts}点${r.out ? '｜⚠️退場' : ''}</div><p>${esc(r.text)}</p></div>`).join('')}` : '').join('')}
+    ${g.epilogue ? `<p class="kicker">決着</p><p class="scene">${esc(g.epilogue)}</p>` : ''}`;
+  show('logView');
 }
 
 /* ---------- 画面のつなぎ ---------- */
@@ -398,6 +452,8 @@ function openSettings() {
 document.querySelectorAll('[data-start]').forEach((b) => (b.onclick = () => startGame(b.dataset.start)));
 document.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => { refreshKeyNote(); show(b.dataset.go); }));
 $('#openSettings').onclick = openSettings;
+$('#openLogs').onclick = showLogs;
+$('#backToLogs').onclick = showLogs;
 $('#saveSettings').onclick = () => {
   store.key = $('#apiKey').value.trim();
   store.model = $('#model').value;

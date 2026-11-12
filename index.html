@@ -25,6 +25,7 @@
     <div class="stack">
       <button class="btn primary" data-start="cpu">CPUと対戦</button>
       <button class="btn" data-start="2p">2人で対戦（1台を回す）</button>
+      <button class="btn" id="openLogs">対戦ログ</button>
       <button class="btn ghost" id="openSettings">設定</button>
     </div>
     <p class="note" id="keyNote"></p>
@@ -125,6 +126,17 @@
       <button class="btn primary" id="againBtn">もう一度あそぶ</button>
       <button class="btn ghost" data-go="home">タイトルへ</button>
     </div>
+  </section>
+
+  <section id="logs" class="screen">
+    <h2 class="h2">対戦ログ</h2>
+    <div class="stack" id="logList"></div>
+    <button class="btn ghost" data-go="home">タイトルへ</button>
+  </section>
+
+  <section id="logView" class="screen">
+    <div class="stack" id="logDetail"></div>
+    <button class="btn ghost" id="backToLogs">ログ一覧へ</button>
   </section>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

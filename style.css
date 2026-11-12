@@ -47,11 +47,12 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 .cards{display:flex;flex-direction:column;gap:10px}
 .card{display:block;width:100%;text-align:left;border-radius:14px;border:2px solid var(--line);background:var(--panel);color:var(--text);padding:12px 14px;cursor:pointer;font:inherit}
 .card:active{border-color:var(--yellow)}
-.card .job{font-size:18px;font-weight:800}
-.card .income{float:right;color:var(--yellow);font-weight:700;font-size:14px}
-.card dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:6px 0 0;font-size:14px}
-.card dt{color:var(--muted)}
-.card dd{margin:0}
+.profHead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+.profHead .job{font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.profHead .income{color:var(--yellow);font-weight:700;font-size:14px;white-space:nowrap;flex:none}
+.prow{display:grid;grid-template-columns:3em 1fr;gap:8px;font-size:14px;line-height:1.6}
+.prow .lab{color:var(--muted)}
+.prow .val{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .stars{color:var(--yellow);letter-spacing:1px}
 .stars i{color:var(--line);font-style:normal}
 .myTeam{display:flex;flex-wrap:wrap;gap:6px}
@@ -63,7 +64,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 .team.b h3{color:var(--blue)}
 .member{font-size:14px;line-height:1.55;padding:6px 0;border-top:1px solid var(--line)}
 .member:first-of-type{border-top:0}
-.member b{font-size:15px}
+.member.prof .profHead .job{font-size:16px}
 .member.out{opacity:.45;text-decoration:line-through}
 .taskBox{border:2px solid var(--yellow);border-radius:14px;padding:14px}
 .task{font-size:19px;font-weight:800;line-height:1.5;margin:6px 0 0}

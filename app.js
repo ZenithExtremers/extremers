@@ -6,6 +6,9 @@ const ROUNDS = 4, PICK_MS = 10000, STAGES = 3, STAGE_WEIGHT = [30, 30, 40];
 // ハラハラ系を多めに（7割）。標的や組織はすべて架空
 const TASK_HOT = ['架空の悪の大物を暗殺する', '命を狙われた要人を守り抜く', '難攻不落の監獄から脱獄する', '仕掛けられた巨大爆弾を止める', '悪の組織の金庫から奪い去る', '人質を救出する', '仲間に紛れた裏切り者を暴いて始末する', '敵の秘密兵器を破壊する', '凶悪な追っ手から逃げ切る', '黒幕の正体を突き止めて捕らえる'];
 const TASK_MILD = ['潜入する', '騒ぎを起こす', '作り上げる', '勝負に勝つ', '説得する', '隠し通す', '運ぶ'];
+// お題ごとのBGM（audio.js の GROOVES）
+const GROOVE_HOT = ['assassin', 'guard', 'escape', 'bomb', 'vault', 'hostage', 'traitor', 'weapon', 'pursuit', 'mastermind'];
+const GROOVE_MILD = ['infiltrate', 'riot', 'build', 'contest', 'persuade', 'hide', 'haul'];
 // 対戦相手との駆け引き
 const KIND = { normal: 'normal', sabotage: 'sabotage', coop: 'coop' };
 const SABOTAGE_HIT = 25, SABOTAGE_COST = 10, COOP_BOTH = 20, BETRAY_BONUS = 10;
@@ -33,7 +36,6 @@ function sceneFor(id) {
   if (id === 'final') return [S.mode === 'cpu' && S.last?.win?.w === 1 ? 'lose' : 'win', S.mood, false];
   return null; // 読み込み中・受け渡し画面は今の曲のまま
 }
-const MOODS = ['spy', 'electro', 'retro', 'comic'];
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -161,10 +163,9 @@ function setupPrompt(type) {
 - 命がけの緊迫感があるハラハラするミッションにする。ユーモアは少しだけ
 - 標的・組織・場所の名前はすべて架空にする。実在の人物・団体・事件は使わない
 - 人物の能力は考えずに作る。具体的な実行手順や残酷な描写は書かない
-- mood：このミッションに合うBGMの曲調を1つ選ぶ。spy＝スパイ映画風（暗殺・潜入・裏切りなどシリアス）、electro＝ダークなエレクトロ（爆破・兵器・近未来）、retro＝レトロゲーム風（勝負・冒険・ゲームっぽいもの）、comic＝コミカル（ばかばかしいもの）
 
 出力形式：
-{"task":"課題の1文","mood":"spy","players":[ [ [人物×5], [人物×5], [人物×5], [人物×5] ], [ 同じく4巡ぶん ] ]}
+{"task":"課題の1文","players":[ [ [人物×5], [人物×5], [人物×5], [人物×5] ], [ 同じく4巡ぶん ] ]}
 人物：{"income":"720万円","job":"職業","hobby":"趣味","skill":"特技","ath":3}`;
 }
 
@@ -209,11 +210,11 @@ async function doSetup() {
   loading('人物と究極の課題を用意しています…');
   try {
     const pool = rnd(10) <= 7 ? TASK_HOT : TASK_MILD;
-    const type = pool[rnd(pool.length) - 1];
+    const ti = rnd(pool.length) - 1, type = pool[ti];
     const d = await ask(GM, setupPrompt(type), 7000);
     if (!d.players || d.players.length < 2) throw new Error('人物データが足りません。');
     S.pools = d.players; S.task = d.task;
-    S.mood = MOODS.includes(d.mood) ? d.mood : (pool === TASK_HOT ? ['spy', 'electro'] : ['comic', 'retro'])[rnd(2) - 1];
+    S.type = type; S.mood = (pool === TASK_HOT ? GROOVE_HOT : GROOVE_MILD)[ti];
     nextDraft();
   } catch (e) { fail(e, doSetup); }
 }

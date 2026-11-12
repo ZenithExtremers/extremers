@@ -25,7 +25,7 @@ function show(id) {
   document.querySelectorAll('.screen').forEach((el) => el.classList.toggle('active', el.id === id));
   window.scrollTo(0, 0);
   const sc = sceneFor(id);
-  if (sc && window.Sound) Sound.play(...sc);
+  if (sc && typeof Sound !== 'undefined') Sound.play(...sc);
 }
 /* 画面ごとのBGM。曲調はお題（S.mood）で変わる */
 function sceneFor(id) {
@@ -104,6 +104,7 @@ const INTRO_LINE = {
   build: '資材をかき集めています…', contest: '勝負の舞台が整いつつある…', persuade: '相手の心のすき間を探っています…',
   hide: '痕跡を消しています…', haul: '積み荷をつかんで走り出した…',
 };
+function crewName(r) { return [r.ex, ...(r.helpers || [])].map((m) => m.job).join('＆'); }
 function actionLines(rs, final) {
   const [a, b] = rs, k = (r) => r.kind;
   const lines = [final ? `最終局面──「${a.label}」にすべてを懸ける…` : `作戦「${a.label}」発動中…`];
@@ -111,7 +112,7 @@ function actionLines(rs, final) {
   if (k(a) === 'sabotage' || k(b) === 'sabotage') lines.push('妨害工作、進行中…');
   if (k(a) === 'coop' && k(b) === 'coop') lines.push('一時休戦、握手を交わす…');
   else if (k(a) === 'coop' || k(b) === 'coop') lines.push('休戦の申し出、その答えは…');
-  lines.push(a.ok ? `${a.ex.job}が流れをつかんだ…` : `${a.ex.job}に予期せぬ事態…`);
+  lines.push(a.ok ? `${crewName(a)}が流れをつかんだ…` : `${crewName(a)}に予期せぬ事態…`);
   if (final) lines.push('決着の瞬間が近づいている…');
   return lines;
 }
@@ -426,13 +427,20 @@ function prepTeam(p) {
   const apt = aptOf(ex);
   const base = APT_RATE[apt] + (o.physical ? (ex.ath - 3) * 10 : 0);
   const mine = kindOf(p), theirs = kindOf(1 - p), mods = [];
+  // 向いている仲間が加勢することがある（ぴったり60%、こじつけ25%。最大2人）
+  const helpers = [];
+  members.filter((m) => m !== ex).forEach((m) => {
+    const a = aptOf(m);
+    if (helpers.length < 2 && ((a === 'fit' && rnd(100) <= 60) || (a === 'stretch' && rnd(100) <= 25))) helpers.push({ m, a });
+  });
+  helpers.forEach(({ m, a }) => mods.push([`${m.job}が加勢`, a === 'fit' ? +10 : +5]));
   if (mine === KIND.sabotage) mods.push(['妨害に人手を割いた', -SABOTAGE_COST]);
   if (theirs === KIND.sabotage) mods.push(['相手チームの妨害', -SABOTAGE_HIT]);
   if (mine === KIND.coop && theirs === KIND.coop) mods.push(['共闘成立', +COOP_BOTH]);
   if (mine === KIND.sabotage && theirs === KIND.coop) mods.push(['共闘の申し出を逆手に取った', +BETRAY_BONUS]);
   if (mine === KIND.coop && theirs === KIND.normal) mods.push(['共闘を断られた', 0]);
   const rate = Math.max(5, Math.min(95, base + mods.reduce((t, m) => t + m[1], 0)));
-  return { p, label: o.label, detail: o.detail, kind: mine, ex, apt, base, mods, rate, canOut: S.stage < STAGES - 1 && members.length > 1 };
+  return { p, label: o.label, detail: o.detail, kind: mine, ex, helpers: helpers.map((h) => h.m), apt, base, mods, rate, canOut: S.stage < STAGES - 1 && members.length > 1 };
 }
 /* 出た目から成否と得点を決める。成功は配点の60〜100%、失敗は0〜30%（惜しいほど多い） */
 function finishTeam(r, roll) {
@@ -442,7 +450,7 @@ function finishTeam(r, roll) {
     ? Math.round(w * (0.6 + 0.4 * (r.rate - roll + 1) / r.rate))
     : Math.round(w * 0.3 * (1 - (roll - r.rate - 1) / Math.max(1, 100 - r.rate)));
   r.out = false;
-  if (!r.ok && r.canOut && rnd(100) <= OUT_CHANCE) { r.out = true; r.ex.out = true; }
+  if (!r.ok && r.canOut && rnd(100) <= OUT_CHANCE) { const crew = [r.ex, ...r.helpers]; r.outM = crew[rnd(crew.length) - 1]; r.out = true; r.outM.out = true; }
   const margin = Math.abs(roll - r.rate);
   r.grade = r.ok ? (margin >= 40 ? '大成功' : margin <= 8 ? 'ギリギリ成功' : '成功') : (margin <= 8 ? '惜しくも失敗' : margin >= 40 ? '大失敗' : '失敗');
   S.scores[r.p] += r.pts; S.stagePts[r.p][S.stage] = r.pts;
@@ -451,7 +459,7 @@ function finishTeam(r, roll) {
 function outcomeText(r) {
   const m = r.ex;
   const inter = r.mods.length ? `相手との駆け引き：${r.mods.map((x) => x[0]).join('、')}。` : '';
-  return `チーム${r.p ? 'B' : 'A'}（${S.names[r.p]}）：方針「${r.label}」（${r.detail}、種類：${{ normal: '課題に挑む', sabotage: '相手を妨害', coop: '相手に共闘を持ちかける' }[r.kind]}）。${inter}実行したのは${m.id}の${m.job}（趣味：${m.hobby}／特技：${m.skill}／運動神経${m.ath}）。判定は【${r.grade}】${r.out ? '。失敗の結果、この人物は退場' : ''}。`;
+  return `チーム${r.p ? 'B' : 'A'}（${S.names[r.p]}）：方針「${r.label}」（${r.detail}、種類：${{ normal: '課題に挑む', sabotage: '相手を妨害', coop: '相手に共闘を持ちかける' }[r.kind]}）。${inter}実行したのは${m.id}の${m.job}（趣味：${m.hobby}／特技：${m.skill}／運動神経${m.ath}）${r.helpers.length ? `。加勢したのは${r.helpers.map((h) => `${h.id}の${h.job}（特技：${h.skill}）`).join('と')}` : ''}。判定は【${r.grade}】${r.out ? `。失敗の結果、${r.outM.job}が退場` : ''}。`;
 }
 function decideWinner() {
   if (S.scores[0] !== S.scores[1]) return { w: S.scores[0] > S.scores[1] ? 0 : 1, how: '得点' };
@@ -477,7 +485,7 @@ function rollFor(p) {
     $('#rollKicker').textContent = S.stage === STAGES - 1 ? '最終関門' : `第${S.stage + 1}関門`;
     $('#rollTitle').textContent = `${p ? '🟦' : '🟥'} ${S.names[p]}の判定`;
     $('#rollPlan').textContent = `作戦：${r.label}`;
-    $('#rollWho').innerHTML = `<p class="note" style="margin:0 0 6px">実行するのは…</p>${cardHTML(m)}`;
+    $('#rollWho').innerHTML = `<p class="note" style="margin:0 0 6px">実行するのは…</p>${cardHTML(m)}${r.helpers.map((h) => `<p class="note helpLab">＋加勢</p>${cardHTML(h)}`).join('')}`;
     $('#rollLine').textContent = `${r.rate}以下で成功`;
     $('#rollMods').innerHTML = r.mods.map(([t, v]) => `<span>${esc(t)}${v ? `（${v > 0 ? '+' : '−'}${Math.abs(v)}）` : ''}</span>`).join('');
     const face = $('#dieFace'), verdict = $('#rollVerdict'), btn = $('#rollBtn');
@@ -494,7 +502,7 @@ function rollFor(p) {
         const roll = rnd(100);
         finishTeam(r, roll);
         face.textContent = roll;
-        verdict.textContent = `${r.grade}！ +${r.pts}点${r.out ? '（⚠️退場）' : ''}`;
+        verdict.textContent = `${r.grade}！ +${r.pts}点${r.out ? `（⚠️${r.outM.job}が退場）` : ''}`;
         verdict.classList.add(r.ok ? 'ok' : 'ng');
         Sound.sfx(r.grade === '大成功' ? 'great' : r.ok ? 'ok' : 'ng');
         if (r.out) setTimeout(() => Sound.sfx('out'), 450);
@@ -513,7 +521,7 @@ function rollFor(p) {
 async function narrate() {
   const { rs, win } = S.last;
   const final = S.stage === STAGES - 1;
-  loading(actionLines(rs, final), vsHTML(rs[0].ex.job, rs[1].ex.job, `${esc(S.names[0])} ${S.scores[0]}点　―　${S.scores[1]}点 ${esc(S.names[1])}`));
+  loading(actionLines(rs, final), vsHTML(crewName(rs[0]), crewName(rs[1]), `${esc(S.names[0])} ${S.scores[0]}点　―　${S.scores[1]}点 ${esc(S.names[1])}`));
   const base = `究極の課題：${S.task}\n\n${teamText()}\n\nこれまで：\n${historyText()}\n\n今回の場面：${S.scene.scene}\n\n判定結果（サイコロで決定済み。成功と失敗を絶対に入れ替えない。忖度しない。妨害・共闘・裏切りなど相手との駆け引きも物語に描く）：\n${outcomeText(rs[0])}\n${outcomeText(rs[1])}`;
   const spec = final
     ? `\n\n両チームの結果を書き、最後に決着を書きます。勝者はチーム${win.w ? 'B' : 'A'}（${S.names[win.w]}）で確定しています（決め手：${win.how}）。勝者を変えないこと。
@@ -530,7 +538,7 @@ async function narrate() {
   } catch (e) { fail(e, narrate); }
 }
 function diceLine(r) {
-  return `<div class="dice">実行：${esc(r.ex.job)}｜🎲${r.roll}（${r.rate}以下で成功）→ <span class="${r.ok ? 'ok' : 'ng'}">${r.grade}</span> +${r.pts}点${r.out ? '｜⚠️退場' : ''}</div>`;
+  return `<div class="dice">実行：${esc(crewName(r))}｜🎲${r.roll}（${r.rate}以下で成功）→ <span class="${r.ok ? 'ok' : 'ng'}">${r.grade}</span> +${r.pts}点${r.out ? `｜⚠️${esc(r.outM.job)}が退場` : ''}</div>`;
 }
 function scoreHTML() {
   return `<span>🟥 ${esc(S.names[0])} ${S.scores[0]}<small>/100</small></span><span>🟦 ${esc(S.names[1])} ${S.scores[1]}<small>/100</small></span>`;
@@ -543,7 +551,7 @@ function showResult(d) {
   $('#scoreBox').innerHTML = scoreHTML();
   S.log[S.stage] = {
     scene: S.scene.scene,
-    rs: rs.map((r) => ({ p: r.p, label: r.label, job: r.ex.job, roll: r.roll, rate: r.rate, grade: r.grade, ok: r.ok, pts: r.pts, out: r.out, text: r.p ? d.resultB : d.resultA })),
+    rs: rs.map((r) => ({ p: r.p, label: r.label, job: crewName(r), outJob: r.out ? r.outM.job : '', roll: r.roll, rate: r.rate, grade: r.grade, ok: r.ok, pts: r.pts, out: r.out, text: r.p ? d.resultB : d.resultA })),
   };
   const btn = $('#resultNext');
   if (final) {
@@ -605,7 +613,7 @@ function showLogDetail(i) {
     ${teamsHTML(g)}
     ${(g.stages || []).map((st, k) => st ? `<p class="kicker">${stageName(k)}</p><p class="scene">${esc(st.scene)}</p>
       ${st.rs.map((r) => `<div class="res ${r.p ? 'b' : 'a'}"><h3>${r.p ? '🟦' : '🟥'} ${esc(g.names[r.p])}：${esc(r.label)}</h3>
-      <div class="dice">実行：${esc(r.job)}｜🎲${r.roll}（${r.rate}以下で成功）→ <span class="${r.ok ? 'ok' : 'ng'}">${esc(r.grade)}</span> +${r.pts}点${r.out ? '｜⚠️退場' : ''}</div><p>${esc(r.text)}</p></div>`).join('')}` : '').join('')}
+      <div class="dice">実行：${esc(r.job)}｜🎲${r.roll}（${r.rate}以下で成功）→ <span class="${r.ok ? 'ok' : 'ng'}">${esc(r.grade)}</span> +${r.pts}点${r.out ? `｜⚠️${esc(r.outJob || '')}が退場` : ''}</div><p>${esc(r.text)}</p></div>`).join('')}` : '').join('')}
     ${g.epilogue ? `<p class="kicker">決着</p><p class="scene">${esc(g.epilogue)}</p>` : ''}`;
   show('logView');
 }

@@ -56,7 +56,39 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 1600);
 }
 function stars(n) { return '★'.repeat(n) + '<i>' + '★'.repeat(5 - n) + '</i>'; }
-function loading(text) { $('#loadingText').textContent = text; show('loading'); }
+/* 読み込み中の文言。配列なら少しずつ切り替える */
+let loadingTimer = null;
+function loading(text) {
+  clearInterval(loadingTimer);
+  const lines = Array.isArray(text) ? text : [text];
+  let i = 0;
+  const el = $('#loadingText');
+  el.textContent = lines[0];
+  if (lines.length > 1) loadingTimer = setInterval(() => {
+    if (!$('#loading').classList.contains('active')) return clearInterval(loadingTimer);
+    i = (i + 1) % lines.length; el.textContent = lines[i];
+  }, 2200);
+  show('loading');
+}
+const INTRO_LINE = {
+  assassin: '標的の足取りを追跡中…', guard: '要人の周囲を固めています…', escape: '脱出ルートを探っています…',
+  bomb: '爆弾のタイマーが動き出した…', vault: '金庫への侵入経路を確保中…', hostage: '人質の居場所を割り出し中…',
+  traitor: '裏切り者の影を追っています…', weapon: '秘密兵器の格納庫へ接近中…', pursuit: '追っ手の足音が迫る…',
+  mastermind: '黒幕への手がかりを洗い出し中…', infiltrate: '潜入ルートを確保中…', riot: '騒ぎの火種を仕込み中…',
+  build: '資材をかき集めています…', contest: '勝負の舞台が整いつつある…', persuade: '相手の心のすき間を探っています…',
+  hide: '痕跡を消しています…', haul: '積み荷をつかんで走り出した…',
+};
+function actionLines(rs, final) {
+  const [a, b] = rs, k = (r) => r.kind;
+  const lines = [final ? `最終局面──「${a.label}」にすべてを懸ける…` : `作戦「${a.label}」発動中…`];
+  lines.push(`${S.names[1]}は「${b.label}」で動いた…`);
+  if (k(a) === 'sabotage' || k(b) === 'sabotage') lines.push('妨害工作、進行中…');
+  if (k(a) === 'coop' && k(b) === 'coop') lines.push('一時休戦、握手を交わす…');
+  else if (k(a) === 'coop' || k(b) === 'coop') lines.push('休戦の申し出、その答えは…');
+  lines.push(a.ok ? `${a.ex.job}が流れをつかんだ…` : `${a.ex.job}に予期せぬ事態…`);
+  if (final) lines.push('決着の瞬間が近づいている…');
+  return lines;
+}
 function fail(err, again) {
   $('#errorText').textContent = err.message || String(err);
   retryFn = again; show('error');
@@ -207,7 +239,7 @@ function startGame(mode) {
   doSetup();
 }
 async function doSetup() {
-  loading('人物と究極の課題を用意しています…');
+  loading(['エクストリーマーを招集中…', '極秘ミッションを受信中…', '候補者の経歴を洗い出し中…']);
   try {
     const pool = rnd(10) <= 7 ? TASK_HOT : TASK_MILD;
     const ti = rnd(pool.length) - 1, type = pool[ti];
@@ -305,7 +337,7 @@ function showReveal() {
 
 /* ---------- 関門 ---------- */
 async function firstStage() {
-  loading('第1関門を準備しています…');
+  loading([INTRO_LINE[S.mood] || 'ミッション開始…', '第1関門へ突入中…']);
   try {
     const d = await ask(GM, `究極の課題：${S.task}\n\n${teamText()}\n\n${STAGE_SPEC(1)}\n\n出力形式：${OPT_SCHEMA}`, 3000);
     S.scene = d; S.stage = 0; showStage();
@@ -445,7 +477,7 @@ function rollFor(p) {
 async function narrate() {
   const { rs, win } = S.last;
   const final = S.stage === STAGES - 1;
-  loading(final ? '決着を書いています…' : '結果を書いています…');
+  loading(actionLines(rs, final));
   const base = `究極の課題：${S.task}\n\n${teamText()}\n\nこれまで：\n${historyText()}\n\n今回の場面：${S.scene.scene}\n\n判定結果（サイコロで決定済み。成功と失敗を絶対に入れ替えない。忖度しない。妨害・共闘・裏切りなど相手との駆け引きも物語に描く）：\n${outcomeText(rs[0])}\n${outcomeText(rs[1])}`;
   const spec = final
     ? `\n\n両チームの結果を書き、最後に決着を書きます。勝者はチーム${win.w ? 'B' : 'A'}（${S.names[win.w]}）で確定しています（決め手：${win.how}）。勝者を変えないこと。

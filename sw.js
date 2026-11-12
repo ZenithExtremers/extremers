@@ -1,4 +1,4 @@
-const CACHE = 'extremers-v13';
+const CACHE = 'extremers-v14';
 const ASSETS = ['./', './index.html', './style.css', './app.js', './audio.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/maskable-512.png'];
 

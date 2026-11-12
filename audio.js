@@ -352,10 +352,12 @@ const Sound = (() => {
     const ch = CH[prog[bar % 4]].map((x) => x + sty.root);
     const L = (n, dur, vol, oct = 12) => tone(out, t, hz(n + oct), dur, { type: sty.lead, cut: sty.leadCut, vol });
     const B = (n, dur, vol) => tone(out, t, hz(n - 12), dur, { type: sty.bass, cut: sty.bassCut, vol });
-    const P = (dur, vol) => ch.forEach((n, k) => tone(out, t, hz(n), dur, { type: sty.pad, cut: sty.padCut, vol, attack: 0.25, release: 0.4, detune: (k - 1) * 6 }));
+    const P = (dur, vol) => ch.forEach((n, k) => tone(out, t, hz(n), dur, { type: sty.pad, cut: sty.padCut, vol, attack: sc === 'title' && s === 0 ? 0.02 : 0.25, release: 0.4, detune: (k - 1) * 6 }));
     const sixteenth = 60 / song.bpm / 4;
 
     if (sc === 'title') {
+      if (s === 0) { kick(out, t, 0.4); noise(out, t, 1.2, { freq: 4500, vol: 0.05 }); }
+      if (s < 32 && pos % 4 === 0) L(ch[(pos / 4) % 3], sixteenth * 2, 0.035);
       if (pos === 0) P(sixteenth * 16, 0.035);
       if (pos === 0 || pos === 8) B(ch[0], sixteenth * 7, 0.11);
       if ([0, 6, 10, 14].includes(pos) && bar % 2 === 1) L(ch[[0, 1, 2, 1][[0, 6, 10, 14].indexOf(pos)]], sixteenth * 3, 0.035);
@@ -419,13 +421,14 @@ const Sound = (() => {
     urgent = false;
     const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(bgmBus);
     const lvl = GROOVES[style] && (scene === 'draft' || scene === 'stage') ? 1.3 * (GROOVES[style].gain || 1) : ({ title: 1.6, draft: 1.1, stage: final ? 1.0 : 1.5, win: 0.9, lose: 1.8 }[scene] || 1);
-    g.gain.linearRampToValueAtTime(lvl, ctx.currentTime + 0.4);
+    g.gain.linearRampToValueAtTime(lvl, ctx.currentTime + (scene === 'title' ? 0.05 : 0.4));
     const gr = GROOVES[style] && (scene === 'draft' || scene === 'stage') ? style : null;
     const baseKey = GROOVES[style] ? GROOVES[style].base : (STYLES[style] ? style : 'electro');
     const sty = STYLES[baseKey];
-    song = { scene, style: baseKey, groove: gr, final, gain: g, step: 0, next: ctx.currentTime + 0.08,
+    song = { scene, style: baseKey, groove: gr, final, gain: g, step: 0, next: ctx.currentTime + 0.03,
              bpm: gr ? GROOVES[gr].bpm * (scene === 'stage' && final ? 1.1 : scene === 'draft' ? 1.08 : 1) : SCENES[scene].bpm * sty.tempo * (scene === 'stage' && final ? 1.18 : 1) };
     if (!loopId) loopId = setInterval(loop, 25);
+    loop();
   }
   function setUrgent(on) {
     if (!song || song.scene !== 'draft' || urgent === on) return;
@@ -465,7 +468,7 @@ const Sound = (() => {
   function toggle() { st.on = !st.on; save(); unlock(); apply(); return st.on; }
   function setVol(kind, v) { st[kind] = Math.max(0, Math.min(1, v)); save(); apply(); }
 
-  ['pointerdown', 'keydown'].forEach((ev) => window.addEventListener(ev, unlock, { capture: true }));
+  ['pointerdown', 'touchstart', 'keydown', 'click'].forEach((ev) => window.addEventListener(ev, unlock, { capture: true, passive: true }));
   document.addEventListener('visibilitychange', () => {
     if (!ctx) return;
     if (document.hidden) ctx.suspend(); else ctx.resume();

@@ -10,7 +10,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 .screen.active{display:flex}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-.logo{width:140px;height:140px;border-radius:32px;align-self:center;margin-top:24px;box-shadow:0 0 0 2px var(--line)}
+.logo{width:140px;height:140px;align-self:center;margin-top:24px}
 .title,.h2,.winner{font-family:"Dela Gothic One",system-ui,sans-serif;font-weight:400;margin:0}
 .title{font-size:34px;text-align:center;letter-spacing:.02em}
 .sub{text-align:center;color:var(--muted);margin:0}

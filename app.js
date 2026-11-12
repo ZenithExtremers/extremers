@@ -57,11 +57,50 @@ const store = {
 };
 function refreshKeyNote() {
   $('#keyNote').textContent = store.key ? '' : 'はじめに「設定」でGemini APIキー（無料）を入れてください。';
+  refreshQuota();
+}
+
+/* ---------- 無料枠の残り回数（この端末で数える） ---------- */
+const CALLS_PER_GAME = 5;
+const DEFAULT_LIMIT = { 'gemini-3.5-flash': 20, 'gemini-3.1-flash-lite': 100, 'gemini-2.5-pro': 25 };
+function ptParts() { // 無料枠は太平洋時間の0時にリセット
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const o = Object.fromEntries(f.formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return { day: `${o.year}-${o.month}-${o.day}`, mins: (+o.hour) * 60 + (+o.minute) };
+}
+function resetTimeText() {
+  const t = new Date(Date.now() + (24 * 60 - ptParts().mins) * 60000);
+  return `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`;
+}
+const quota = {
+  read() { try { return JSON.parse(localStorage.getItem('ext_quota') || '{}'); } catch { return {}; } },
+  write(q) { try { localStorage.setItem('ext_quota', JSON.stringify(q)); } catch {} },
+  limit(model = store.model) {
+    try { const v = JSON.parse(localStorage.getItem('ext_limits') || '{}')[model]; if (v > 0) return v; } catch {}
+    return DEFAULT_LIMIT[model] || 20;
+  },
+  setLimit(model, v) {
+    try { const m = JSON.parse(localStorage.getItem('ext_limits') || '{}'); m[model] = v; localStorage.setItem('ext_limits', JSON.stringify(m)); } catch {}
+  },
+  used(model = store.model) { const q = this.read(), d = ptParts().day; return q[model]?.day === d ? q[model].n : 0; },
+  add(model = store.model, n = 1) { const q = this.read(), d = ptParts().day; q[model] = { day: d, n: (q[model]?.day === d ? q[model].n : 0) + n }; this.write(q); },
+  exhaust(model = store.model) { const q = this.read(); q[model] = { day: ptParts().day, n: this.limit(model) }; this.write(q); },
+  left(model = store.model) { return Math.max(0, this.limit(model) - this.used(model)); },
+};
+function refreshQuota() {
+  const el = $('#quotaNote'); if (!el) return;
+  if (!store.key) { el.textContent = ''; return; }
+  const left = quota.left(), games = Math.floor(left / CALLS_PER_GAME);
+  el.textContent = games > 0
+    ? `今日あと${games}ゲーム遊べます（残り${left}回／${quota.limit()}回）`
+    : `今日の無料枠を使い切りました。${resetTimeText()}にリセットされます`;
+  el.classList.toggle('ng', games === 0);
 }
 
 /* ---------- Gemini API（無料枠） ---------- */
 async function ask(system, user, maxTokens = 4000) {
   if (!store.key) throw new Error('APIキーが未設定です。タイトルの「設定」から入れてください。');
+  quota.add();
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(store.model)}:generateContent`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': store.key },
@@ -73,7 +112,10 @@ async function ask(system, user, maxTokens = 4000) {
   });
   if (!res.ok) {
     const t = await res.text();
-    if (res.status === 429) throw new Error('無料枠の回数上限に達しました。少し時間をおくか、設定で別のモデルに切り替えてください（1日の上限は日本時間の夕方ごろにリセットされます）。');
+    if (res.status === 429) {
+      if (/per ?day|PerDay|daily/i.test(t)) quota.exhaust();
+      throw new Error(`無料枠の回数上限に達しました。1分ほど待つか、設定で別のモデルに切り替えてください（1日の上限は${resetTimeText()}にリセットされます）。`);
+    }
     if (res.status === 400 || res.status === 403) throw new Error(`APIキーかモデルの設定を確認してください（${res.status}）：${t.slice(0, 200)}`);
     throw new Error(`API エラー（${res.status}）：${t.slice(0, 300)}`);
   }
@@ -139,6 +181,10 @@ const OPT_SCHEMA = '{"scene":"…","options":[{"label":"…","detail":"…","kin
 /* ---------- ゲーム開始・ドラフト ---------- */
 function startGame(mode) {
   if (!store.key) { toast('先にAPIキーを設定してください'); openSettings(); return; }
+  if (quota.left() < CALLS_PER_GAME) {
+    toast(`今日の無料枠が足りません（${resetTimeText()}にリセット）`);
+    refreshQuota(); show('home'); return;
+  }
   S = {
     mode, names: mode === 'cpu' ? ['あなた', 'CPU'] : ['プレイヤー1', 'プレイヤー2'],
     pools: null, task: '', teams: [[], []], round: 0, turn: 0,
@@ -360,9 +406,10 @@ function rollFor(p) {
         face.textContent = roll;
         verdict.textContent = `${r.grade}！ +${r.pts}点${r.out ? '（⚠️退場）' : ''}`;
         verdict.classList.add(r.ok ? 'ok' : 'ng');
-        btn.disabled = false; btn.textContent = '次へ';
-        btn.onclick = () => rollFor(p + 1);
-        if (isCpu(p)) setTimeout(() => rollFor(p + 1), 1600);
+        let moved = false;
+        const next = () => { if (moved) return; moved = true; rollFor(p + 1); };
+        if (isCpu(p)) { btn.textContent = '…'; setTimeout(next, 1600); }
+        else { btn.disabled = false; btn.textContent = '次へ'; btn.onclick = next; }
       }, 1100);
     };
     if (isCpu(p)) { btn.textContent = 'CPUが振っています'; btn.disabled = true; show('roll'); setTimeout(doRoll, 700); }
@@ -475,8 +522,10 @@ function showLogDetail(i) {
 function openSettings() {
   $('#apiKey').value = store.key;
   $('#model').value = store.model;
+  $('#dailyLimit').value = quota.limit(store.model);
   show('settings');
 }
+$('#model').onchange = () => { $('#dailyLimit').value = quota.limit($('#model').value); };
 document.querySelectorAll('[data-start]').forEach((b) => (b.onclick = () => startGame(b.dataset.start)));
 document.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => { refreshKeyNote(); show(b.dataset.go); }));
 $('#openSettings').onclick = openSettings;
@@ -485,11 +534,14 @@ $('#backToLogs').onclick = showLogs;
 $('#saveSettings').onclick = () => {
   store.key = $('#apiKey').value.trim();
   store.model = $('#model').value;
+  const lim = Math.floor(+$('#dailyLimit').value);
+  if (lim > 0) quota.setLimit(store.model, lim);
   refreshKeyNote(); toast('保存しました'); show('home');
 };
 $('#retryBtn').onclick = () => retryFn && retryFn();
 $('#beginBtn').onclick = firstStage;
 $('#againBtn').onclick = () => startGame(S.mode);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshQuota(); });
 refreshKeyNote();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

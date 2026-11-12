@@ -28,6 +28,7 @@
       <button class="btn" id="openLogs">対戦ログ</button>
       <button class="btn ghost" id="openSettings">設定</button>
     </div>
+    <p class="quota" id="quotaNote"></p>
     <p class="note" id="keyNote"></p>
   </section>
 
@@ -44,6 +45,10 @@
         <option value="gemini-2.5-pro">Gemini 2.5 Pro（じっくり・回数少なめ）</option>
       </select>
     </label>
+    <label class="field">このモデルの1日の上限（回）
+      <input id="dailyLimit" type="number" min="1" inputmode="numeric">
+    </label>
+    <p class="note">AI Studioの「レート制限」ページのRPDの数字に合わせてください。1ゲームで5回使います。</p>
     <p class="note">キーはこの端末の中にだけ保存され、Googleへの通信にだけ使われます。無料枠では1日に使える回数に上限があり、送った内容はGoogleのサービス改善に使われます。</p>
     <div class="stack">
       <button class="btn primary" id="saveSettings">保存</button>

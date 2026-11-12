@@ -17,6 +17,10 @@
 </head>
 <body>
 <main id="app">
+  <button class="mute" id="muteBtn" type="button" aria-label="音をオフにする">
+    <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+    <svg class="offi" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
 
   <section id="home" class="screen active">
     <img class="logo" src="icons/icon-512.png" alt="EXTREMERSのアイコン">
@@ -49,6 +53,12 @@
       <input id="dailyLimit" type="number" min="1" inputmode="numeric">
     </label>
     <p class="note">AI Studioの「レート制限」ページのRPDの数字に合わせてください。1ゲームで5回使います。</p>
+    <label class="field">BGMの音量
+      <input id="bgmVol" type="range" min="0" max="100" step="5">
+    </label>
+    <label class="field">効果音の音量
+      <input id="sfxVol" type="range" min="0" max="100" step="5">
+    </label>
     <p class="note">キーはこの端末の中にだけ保存され、Googleへの通信にだけ使われます。無料枠では1日に使える回数に上限があり、送った内容はGoogleのサービス改善に使われます。</p>
     <div class="stack">
       <button class="btn primary" id="saveSettings">保存</button>
@@ -148,6 +158,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </main>
+<script src="audio.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

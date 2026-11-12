@@ -1,5 +1,5 @@
-const CACHE = 'extremers-v10';
-const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest',
+const CACHE = 'extremers-v11';
+const ASSETS = ['./', './index.html', './style.css', './app.js', './audio.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/maskable-512.png'];
 
 self.addEventListener('install', (e) => {

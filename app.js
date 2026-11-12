@@ -21,7 +21,19 @@ let timerId = null;
 function show(id) {
   document.querySelectorAll('.screen').forEach((el) => el.classList.toggle('active', el.id === id));
   window.scrollTo(0, 0);
+  const sc = sceneFor(id);
+  if (sc && window.Sound) Sound.play(...sc);
 }
+/* 画面ごとのBGM。曲調はお題（S.mood）で変わる */
+function sceneFor(id) {
+  if (['home', 'settings', 'logs', 'logView'].includes(id)) return ['title', 'electro', false];
+  if (!S) return null;
+  if (id === 'draft') return ['draft', S.mood, false];
+  if (['reveal', 'stage', 'roll', 'result'].includes(id)) return ['stage', S.mood, id !== 'reveal' && S.stage === STAGES - 1];
+  if (id === 'final') return [S.mode === 'cpu' && S.last?.win?.w === 1 ? 'lose' : 'win', S.mood, false];
+  return null; // 読み込み中・受け渡し画面は今の曲のまま
+}
+const MOODS = ['spy', 'electro', 'retro', 'comic'];
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -149,9 +161,10 @@ function setupPrompt(type) {
 - 命がけの緊迫感があるハラハラするミッションにする。ユーモアは少しだけ
 - 標的・組織・場所の名前はすべて架空にする。実在の人物・団体・事件は使わない
 - 人物の能力は考えずに作る。具体的な実行手順や残酷な描写は書かない
+- mood：このミッションに合うBGMの曲調を1つ選ぶ。spy＝スパイ映画風（暗殺・潜入・裏切りなどシリアス）、electro＝ダークなエレクトロ（爆破・兵器・近未来）、retro＝レトロゲーム風（勝負・冒険・ゲームっぽいもの）、comic＝コミカル（ばかばかしいもの）
 
 出力形式：
-{"task":"課題の1文","players":[ [ [人物×5], [人物×5], [人物×5], [人物×5] ], [ 同じく4巡ぶん ] ]}
+{"task":"課題の1文","mood":"spy","players":[ [ [人物×5], [人物×5], [人物×5], [人物×5] ], [ 同じく4巡ぶん ] ]}
 人物：{"income":"720万円","job":"職業","hobby":"趣味","skill":"特技","ath":3}`;
 }
 
@@ -200,6 +213,7 @@ async function doSetup() {
     const d = await ask(GM, setupPrompt(type), 7000);
     if (!d.players || d.players.length < 2) throw new Error('人物データが足りません。');
     S.pools = d.players; S.task = d.task;
+    S.mood = MOODS.includes(d.mood) ? d.mood : (pool === TASK_HOT ? ['spy', 'electro'] : ['comic', 'retro'])[rnd(2) - 1];
     nextDraft();
   } catch (e) { fail(e, doSetup); }
 }
@@ -254,11 +268,14 @@ function showDraft() {
   show('draft');
   const bar = $('#timerBar'), t0 = performance.now();
   bar.classList.remove('warn');
+  Sound.setUrgent(false);
+  let lastSec = null;
   const tick = (now) => {
     const left = Math.max(0, 1 - (now - t0) / PICK_MS);
     bar.style.transform = `scaleX(${left})`;
-    if (left < 0.34) bar.classList.add('warn');
-    if (left <= 0) return choose(cands[rnd(cands.length) - 1], true);
+    const sec = Math.ceil(left * PICK_MS / 1000);
+    if (sec <= 3 && sec > 0 && sec !== lastSec) { lastSec = sec; Sound.sfx('tick', sec === 1); Sound.setUrgent(true); bar.classList.add('warn'); }
+    if (left <= 0) { Sound.sfx('timeout'); return choose(cands[rnd(cands.length) - 1], true); }
     timerId = requestAnimationFrame(tick);
   };
   timerId = requestAnimationFrame(tick);
@@ -401,6 +418,7 @@ function rollFor(p) {
       if (rolled) return; rolled = true;
       btn.disabled = true; btn.textContent = '…';
       face.classList.add('spin');
+      Sound.sfx('spin');
       const iv = setInterval(() => { face.textContent = rnd(100); }, 60);
       setTimeout(() => {
         clearInterval(iv); face.classList.remove('spin');
@@ -409,6 +427,8 @@ function rollFor(p) {
         face.textContent = roll;
         verdict.textContent = `${r.grade}！ +${r.pts}点${r.out ? '（⚠️退場）' : ''}`;
         verdict.classList.add(r.ok ? 'ok' : 'ng');
+        Sound.sfx(r.grade === '大成功' ? 'great' : r.ok ? 'ok' : 'ng');
+        if (r.out) setTimeout(() => Sound.sfx('out'), 450);
         let moved = false;
         const next = () => { if (moved) return; moved = true; rollFor(p + 1); };
         if (isCpu(p)) { btn.textContent = '…'; setTimeout(next, 1600); }
@@ -526,6 +546,8 @@ function openSettings() {
   $('#apiKey').value = store.key;
   $('#model').value = store.model;
   $('#dailyLimit').value = quota.limit(store.model);
+  $('#bgmVol').value = Math.round(Sound.bgm * 100);
+  $('#sfxVol').value = Math.round(Sound.sfxVol * 100);
   show('settings');
 }
 $('#model').onchange = () => { $('#dailyLimit').value = quota.limit($('#model').value); };
@@ -544,6 +566,20 @@ $('#saveSettings').onclick = () => {
 $('#retryBtn').onclick = () => retryFn && retryFn();
 $('#beginBtn').onclick = firstStage;
 $('#againBtn').onclick = () => startGame(S.mode);
+$('#bgmVol').oninput = (e) => Sound.setVol('bgm', e.target.value / 100);
+$('#sfxVol').oninput = (e) => { Sound.setVol('sfx', e.target.value / 100); Sound.sfx('click'); };
+function paintMute() {
+  const b = $('#muteBtn');
+  b.classList.toggle('off', !Sound.on);
+  b.setAttribute('aria-label', Sound.on ? '音をオフにする' : '音をオンにする');
+  b.setAttribute('aria-pressed', String(!Sound.on));
+}
+$('#muteBtn').onclick = () => { Sound.toggle(); paintMute(); };
+paintMute();
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b && !['rollBtn', 'muteBtn'].includes(b.id)) Sound.sfx('click');
+});
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshQuota(); });
 refreshKeyNote();
 

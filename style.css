@@ -52,6 +52,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 .profHead .income{color:var(--yellow);font-weight:700;font-size:14px;white-space:nowrap;flex:none}
 .prow{display:grid;grid-template-columns:3em 1fr;gap:8px;font-size:14px;line-height:1.6}
 .prow .lab{color:var(--muted)}
+.prow .val.weak{color:#FF9F8F}
 .prow .val{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .stars{color:var(--yellow);letter-spacing:1px}
 .stars i{color:var(--line);font-style:normal}

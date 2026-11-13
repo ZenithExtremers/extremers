@@ -142,8 +142,7 @@ const store = {
   get key() { try { return localStorage.getItem('ext_gkey') || ''; } catch { return ''; } },
   set key(v) { try { localStorage.setItem('ext_gkey', v); } catch {} },
   get model() { try { return localStorage.getItem('ext_gmodel') || 'gemini-3.5-flash'; } catch { return 'gemini-3.5-flash'; } },
-  set model(v) { try { localStorage.setItem('ext_gmodel', v); } catch {} this.thinkOk = undefined; },
-  thinkOk: undefined,
+  set model(v) { try { localStorage.setItem('ext_gmodel', v); } catch {} },
 };
 function refreshKeyNote() {
   if (typeof renderToday === 'function') renderToday();
@@ -189,13 +188,14 @@ function refreshQuota() {
 }
 
 /* ---------- Gemini API（無料枠） ---------- */
+const FALLBACK_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-pro']; // 混雑時に切り替える順
+const noThink = new Set(); // 考える量の指定が使えないモデル
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function ask(system, user, maxTokens = 4000) {
   if (!store.key) throw new Error('APIキーが未設定です。タイトルの「設定」から入れてください。');
-  // 待ち時間を短くするため、AIの考える量を最小にする（使えないモデルなら外して送り直す）
-  const m = store.model;
-  const thinking = /^gemini-2\.5-pro/.test(m) ? { thinkingBudget: 128 } : /^gemini-2\./.test(m) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' };
-  const send = (withThinking) => {
-    quota.add();
+  const send = (m, withThinking) => {
+    // 待ち時間を短くするため、AIの考える量を最小にする（使えないモデルなら外して送り直す）
+    const thinking = /^gemini-2\.5-pro/.test(m) ? { thinkingBudget: 128 } : /^gemini-2\./.test(m) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' };
     const gc = { responseMimeType: 'application/json', maxOutputTokens: Math.max(maxTokens * 3, 16000), temperature: 1 };
     if (withThinking) gc.thinkingConfig = thinking;
     return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`, {
@@ -204,10 +204,37 @@ async function ask(system, user, maxTokens = 4000) {
       body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: gc }),
     });
   };
-  let res = await send(store.thinkOk !== false);
-  if (res.status === 400) {
-    const t0 = await res.clone().text();
-    if (/thinking/i.test(t0)) { store.thinkOk = false; res = await send(false); }
+  // 1つのモデルに送る。混雑（500/503）や通信エラーは少し待って最大3回までやり直す
+  const tryModel = async (m) => {
+    let last = null;
+    for (let i = 0; i < 3; i++) {
+      if (i) { toast(`AIが混雑中…やり直しています（${i + 1}回目）`); await sleep(i === 1 ? 2500 : 6000); }
+      let res;
+      try { res = await send(m, !noThink.has(m)); } catch (e) { last = { net: e }; continue; }
+      if (res.status === 400 && !noThink.has(m) && /thinking/i.test(await res.clone().text())) { noThink.add(m); res = await send(m, false); }
+      if (res.status >= 500) { last = { res, t: await res.text() }; continue; } // 混雑は回数に数えない
+      quota.add(m);
+      return { res };
+    }
+    return { busy: true, last };
+  };
+  const models = [store.model, ...FALLBACK_MODELS.filter((x) => x !== store.model && quota.left(x) > 0)];
+  let res = null, last = null, limited = null;
+  for (const m of models) {
+    if (m !== store.model) toast(`混雑しているので ${m} で作ります`);
+    const r = await tryModel(m);
+    if (r.busy) { last = r.last; continue; }
+    if (r.res.status === 429) { // 回数上限なら次のモデルへ
+      const t = await r.res.text();
+      if (/per ?day|PerDay|daily/i.test(t)) quota.exhaust(m);
+      limited = limited || r.res; continue;
+    }
+    res = r.res; break;
+  }
+  if (!res && limited) throw new Error(`無料枠の回数上限に達しました。1分ほど待つか、設定で別のモデルに切り替えてください（1日の上限は${resetTimeText()}にリセットされます）。`);
+  if (!res) {
+    if (last?.net) throw new Error('通信できませんでした。電波の良い所で「もう一度」を押してください。');
+    throw new Error(`Geminiがとても混雑しています（${last?.res?.status || 503}）。少し待ってから「もう一度」を押してください。`);
   }
   if (!res.ok) {
     const t = await res.text();

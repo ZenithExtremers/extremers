@@ -1,0 +1,109 @@
+rules_version = '2';
+// エクストリーマーズ オンライン版の Firestore ルール
+// Firebase コンソール → Firestore Database → ルール に全部貼り付けて「公開」してください。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
+    function data() { return request.resource.data; }
+    function changed() { return data().diff(resource.data).affectedKeys(); }
+    function validName(n) { return n is string && n.size() >= 1 && n.size() <= 12; }
+    function docPath(p) { return path('/databases/' + database + '/documents/' + p); }
+
+    // ---------- プレイヤー（ランキング・フレンド検索のため、ログイン中なら誰でも読める） ----------
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if isMe(uid)
+        && data().keys().hasOnly(['name', 'code', 'wins', 'losses', 'games', 'lastMatch', 'lastSeen', 'createdAt'])
+        && validName(data().name) && data().code is string && data().code.size() == 6
+        && data().wins == 0 && data().losses == 0 && data().games == 0 && data().lastMatch == '';
+      allow update: if isMe(uid) && validName(data().name) && data().code == resource.data.code
+        && data().keys().hasOnly(['name', 'code', 'wins', 'losses', 'games', 'lastMatch', 'lastSeen', 'createdAt', 'rating'])
+        && (statsSame() || countedMatch(uid));
+
+      function statsSame() {
+        return !changed().hasAny(['wins', 'losses', 'games', 'lastMatch', 'rating']);
+      }
+      // 対戦の結果を1試合につき1回だけ反映できる（同じ書き込みで matches の counted に自分を記録する）
+      function countedMatch(uid) {
+        let id = data().lastMatch;
+        let m = get(docPath('matches/' + id)).data;
+        let after = getAfter(docPath('matches/' + id)).data;
+        let won = m.winnerUid == uid;
+        let old = resource.data;
+        return id is string && id != old.lastMatch
+          && (m.hostUid == uid || m.guestUid == uid)
+          && !(uid in m.counted) && after.counted[uid] == true
+          && data().games == old.games + 1
+          && ((won && data().wins == old.wins + 1 && data().losses == old.losses)
+              || (!won && data().wins == old.wins && data().losses == old.losses + 1))
+          && data().rating is int
+          && math.abs(data().rating - old.get('rating', 1000)) <= 40;
+      }
+
+      // フレンド：自分のリストは自由に。相手のリストには、相手から申請が来ているときだけ自分を書ける（承認）
+      match /friends/{fid} {
+        allow read: if isMe(uid) || isMe(fid);
+        allow create, update: if (isMe(uid) && fid != uid && data().keys().hasOnly(['name', 'ok', 'at']))
+          || (isMe(fid) && exists(docPath('users/' + fid + '/requests/' + uid)) && data().keys().hasOnly(['name', 'ok', 'at']));
+        allow delete: if isMe(uid) || isMe(fid);
+      }
+      // フレンド申請（{from} が自分のときだけ送れる）
+      match /requests/{from} {
+        allow read, delete: if isMe(uid) || isMe(from);
+        allow create, update: if isMe(from) && from != uid && data().keys().hasOnly(['name', 'code', 'at']) && validName(data().name);
+      }
+      // ルームへの招待（相手のフレンドリストで承認済みの人だけ送れる）
+      match /invites/{from} {
+        allow read, delete: if isMe(uid);
+        allow create, update: if isMe(from) && data().keys().hasOnly(['name', 'room', 'at'])
+          && get(docPath('users/' + uid + '/friends/' + from)).data.ok == true;
+      }
+      // 人物図鑑のバックアップ（本人だけ）
+      match /dex/{doc} {
+        allow read, write: if isMe(uid);
+      }
+    }
+
+    // ---------- ルーム ----------
+    match /rooms/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn() && code.size() == 5 && data().code == code
+        && data().hostUid == request.auth.uid && data().guestUid == null && data().status == 'wait';
+      allow update: if signedIn() && (hostUpdate() || guestJoin() || guestAct() || guestLeave());
+      allow delete: if isMe(resource.data.hostUid);
+
+      // ホスト：進行（pub）・状態の更新。参加者の入れ替えはできない
+      function hostUpdate() {
+        return isMe(resource.data.hostUid) && changed().hasOnly(['pub', 'status', 'ga', 'at', 'hostLeft'])
+          && data().status in ['wait', 'play', 'closed'];
+      }
+      // 空いているルームに入る
+      function guestJoin() {
+        return resource.data.guestUid == null && resource.data.status == 'wait' && resource.data.hostLeft != true
+          && data().guestUid == request.auth.uid && request.auth.uid != resource.data.hostUid
+          && changed().hasOnly(['guestUid', 'guestName', 'guestRating']) && validName(data().guestName);
+      }
+      // ゲストの操作（作戦の選択など）
+      function guestAct() {
+        return isMe(resource.data.guestUid) && changed().hasOnly(['ga']);
+      }
+      function guestLeave() {
+        return isMe(resource.data.guestUid) && data().guestUid == null && changed().hasOnly(['guestUid', 'guestName', 'guestRating', 'ga']);
+      }
+    }
+
+    // ---------- 試合の記録（レート計算用） ----------
+    match /matches/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && data().hostUid == request.auth.uid && data().counted == {}
+        && data().winnerUid in [data().hostUid, data().guestUid]
+        && get(docPath('rooms/' + data().room)).data.hostUid == request.auth.uid
+        && get(docPath('rooms/' + data().room)).data.guestUid == data().guestUid;
+      allow update: if signedIn() && (isMe(resource.data.hostUid) || isMe(resource.data.guestUid))
+        && changed().hasOnly(['counted'])
+        && data().counted.diff(resource.data.counted).affectedKeys().hasOnly([request.auth.uid])
+        && data().counted[request.auth.uid] == true;
+    }
+  }
+}

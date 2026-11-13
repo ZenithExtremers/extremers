@@ -28,10 +28,15 @@
     <p class="sub">選ばれしエクストリーマーたちよ、極限へ。</p>
     <div class="stack">
       <button class="btn primary" data-start="cpu">CPUと対戦</button>
+      <button class="btn" id="openOnline">オンライン対戦</button>
       <button class="btn" data-start="2p">2人で対戦（1台を回す）</button>
-      <button class="btn" id="openLogs">対戦ログ</button>
+      <div class="btnRow">
+        <button class="btn" id="openDex">人物図鑑</button>
+        <button class="btn" id="openLogs">対戦ログ</button>
+      </div>
       <button class="btn ghost" id="openSettings">設定</button>
     </div>
+    <div class="inviteBox" id="inviteBox"></div>
     <p class="quota" id="quotaNote"></p>
     <div class="today" id="todayBox"></div>
     <p class="note" id="keyNote"></p>
@@ -132,6 +137,7 @@
     <p class="rollMods" id="rollMods"></p>
     <div class="die" id="dieFace" aria-live="polite">?</div>
     <p class="rollVerdict" id="rollVerdict"></p>
+    <p class="rollOpp" id="rollOpp"></p>
     <button class="btn primary" id="rollBtn">サイコロを振る</button>
   </section>
 
@@ -147,6 +153,7 @@
     <h2 class="winner" id="winnerText"></h2>
     <p class="scene" id="epilogueText"></p>
     <div class="score" id="finalScore"></div>
+    <p class="rateNote" id="rateNote"></p>
     <div class="stack">
       <button class="btn primary" id="againBtn">もう一度あそぶ</button>
       <button class="btn ghost" data-go="home">タイトルへ</button>
@@ -164,9 +171,45 @@
     <button class="btn ghost" id="backToLogs">ログ一覧へ</button>
   </section>
 
+  <section id="online" class="screen">
+    <h2 class="h2">オンライン対戦</h2>
+    <div class="stack" id="onlineBody"></div>
+  </section>
+
+  <section id="lobby" class="screen">
+    <div class="stack" id="lobbyBody"></div>
+  </section>
+
+  <section id="ranking" class="screen">
+    <h2 class="h2">ランキング</h2>
+    <div class="tabs" id="rankTabs" role="tablist"></div>
+    <p class="note" id="rankMine"></p>
+    <div class="rankList" id="rankList"></div>
+    <button class="btn ghost" id="rankBack">戻る</button>
+  </section>
+
+  <section id="friends" class="screen">
+    <h2 class="h2">フレンド</h2>
+    <div class="stack" id="friendsBody"></div>
+    <button class="btn ghost" id="friendsBack">戻る</button>
+  </section>
+
+  <section id="dex" class="screen">
+    <h2 class="h2">人物図鑑</h2>
+    <div class="stack" id="dexBody"></div>
+    <button class="btn ghost" data-go="home">タイトルへ</button>
+  </section>
+
+  <div class="onBar" id="onBar" hidden>
+    <span class="onDot"></span><span class="onText" id="onBarText"></span>
+    <button class="onLeave" id="onLeave" type="button">退出</button>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="audio.js"></script>
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
+<script src="online.js"></script>
 </body>
 </html>

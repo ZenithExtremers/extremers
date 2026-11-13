@@ -151,3 +151,64 @@ details.team[open] summary{margin-bottom:8px}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
   background:var(--red);color:#fff;font-weight:800;padding:10px 18px;border-radius:999px;opacity:0;transition:.25s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------- オンライン・図鑑 ---------- */
+.btnRow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn.small{min-height:44px;font-size:15px;padding:8px 12px;border-radius:12px;flex:none}
+.btn:disabled{opacity:.5;cursor:default}
+.inRow{display:flex;gap:8px;align-items:center}
+.inRow input{flex:1;min-width:0}
+.ngText{color:#FF9F8F}
+.profCard{border:2px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--panel);display:flex;flex-direction:column;gap:10px}
+.statRow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;color:var(--muted)}
+.statRow b{display:block;color:var(--text);font-size:17px;margin-top:2px}
+.code{font-family:ui-monospace,Menlo,monospace;letter-spacing:.12em;color:var(--yellow)}
+.code.big{font-size:28px}
+.roomCode{font-family:"Dela Gothic One",system-ui,sans-serif;font-size:48px;letter-spacing:.18em;text-align:center;color:var(--yellow);
+  border:2px dashed var(--line);border-radius:16px;padding:10px 0}
+.badge{display:inline-block;min-width:0;margin-left:6px;background:var(--red);color:#fff;border-radius:999px;font-size:12px;padding:0 7px;line-height:20px}
+.badge:empty{display:none}
+.inviteBox{display:flex;flex-direction:column;gap:8px}
+.inviteBox:empty{display:none}
+.invite{display:flex;justify-content:space-between;align-items:center;gap:8px;border:2px solid var(--yellow);border-radius:14px;padding:8px 10px;background:var(--panel);font-size:14px}
+.friend{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.friend .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.friend small,.rankRow small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#7CFF4F;margin-right:6px;vertical-align:1px}
+.dot.off{background:var(--line)}
+.tabs,.chipRow{display:flex;gap:8px;flex-wrap:wrap}
+.chipBtn{min-height:40px;border-radius:999px;border:2px solid var(--line);background:transparent;color:var(--muted);font-weight:700;font-size:14px;padding:6px 14px;cursor:pointer}
+.chipBtn.on{background:var(--yellow);border-color:var(--yellow);color:#111}
+.rankList{display:flex;flex-direction:column;gap:6px}
+.rankRow{display:grid;grid-template-columns:2.2em 1fr auto;grid-template-rows:auto auto;column-gap:10px;align-items:center;
+  border:2px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--panel)}
+.rankRow .rk{grid-row:span 2;font-family:"Dela Gothic One",system-ui,sans-serif;font-size:18px;text-align:center;color:var(--muted)}
+.rankRow:nth-child(-n+3) .rk{color:var(--yellow)}
+.rankRow .nm{font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rankRow .rt{grid-row:span 2;font-weight:900;color:var(--yellow);font-size:18px}
+.rankRow.me{border-color:var(--yellow)}
+.dexStat{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.dexStat b{font-family:"Dela Gothic One",system-ui,sans-serif;font-size:28px;color:var(--yellow);font-weight:400}
+.dexStat span{margin-right:10px}
+.dexList{display:flex;flex-direction:column;gap:10px}
+.dexCard{display:grid;grid-template-columns:72px 1fr;gap:10px;align-items:center;border:2px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--panel)}
+.dexCard.got{border-color:#5a4d12}
+.dexCard .prof{min-width:0}
+.dexFig{display:flex;flex-direction:column;align-items:center;gap:2px}
+.dexFig .stick{width:72px;height:104px}
+.dexNo{font-size:11px;color:var(--muted);font-weight:700}
+.dexMeta{margin-top:6px;font-size:12px;color:var(--yellow)}
+.onBar{position:fixed;top:calc(10px + env(safe-area-inset-top));left:max(10px, calc(50% - 250px));right:max(62px, calc(50% - 198px));z-index:20;
+  display:flex;align-items:center;gap:8px;min-height:44px;border:2px solid var(--line);border-radius:999px;background:var(--panel);padding:4px 4px 4px 12px;font-size:13px}
+.onBar[hidden]{display:none}
+.onDot{flex:none;width:9px;height:9px;border-radius:50%;background:#7CFF4F;animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{50%{opacity:.35}}
+.onText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.onLeave{flex:none;min-height:34px;border-radius:999px;border:0;background:var(--line);color:var(--text);font-weight:700;font-size:13px;padding:0 12px;cursor:pointer}
+body.onlineOn #app{padding-top:calc(66px + env(safe-area-inset-top))}
+.cards.locked .card:not(.chosen),#optionsBox.locked .btn.option:not(.chosen){opacity:.4}
+.card.chosen,.btn.option.chosen{border-color:var(--yellow);box-shadow:0 0 0 2px var(--yellow) inset}
+.rollOpp{margin:0;text-align:center;font-size:14px;color:var(--muted);line-height:1.6;min-height:0}
+.rollOpp:empty{display:none}
+.rateNote{margin:0;text-align:center;font-weight:800;color:var(--yellow)}
+.rateNote:empty{display:none}

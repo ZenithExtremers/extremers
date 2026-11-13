@@ -42,11 +42,11 @@ function show(id) {
 }
 /* 画面ごとのBGM。曲調はお題（S.mood）で変わる */
 function sceneFor(id) {
-  if (['home', 'settings', 'logs', 'logView'].includes(id)) return ['title', 'electro', false];
+  if (['home', 'settings', 'logs', 'logView', 'online', 'lobby', 'ranking', 'friends', 'dex'].includes(id)) return ['title', 'electro', false];
   if (!S) return null;
   if (id === 'draft') return ['draft', S.mood, false];
   if (['reveal', 'stage', 'roll', 'result'].includes(id)) return ['stage', S.mood, id !== 'reveal' && S.stage === STAGES - 1];
-  if (id === 'final') return [S.mode === 'cpu' && S.last?.win?.w === 1 ? 'lose' : 'win', S.mood, false];
+  if (id === 'final') return [(S.mode === 'cpu' && S.last?.win?.w === 1) || S.youLost ? 'lose' : 'win', S.mood, false];
   return null; // 読み込み中・受け渡し画面は今の曲のまま
 }
 function esc(s) {
@@ -395,6 +395,7 @@ function teamsHTML(G = S, hide = [false, false]) {
 function showReveal() {
   $('#teamsBox').innerHTML = teamsHTML(S, S.mode === 'cpu' ? [false, true] : [true, true]); // 相手の弱点は伏せる
   $('#taskText').textContent = S.task;
+  const bb = $('#beginBtn'); bb.disabled = false; bb.textContent = '挑戦スタート'; bb.onclick = firstStage;
   show('reveal');
 }
 
@@ -598,8 +599,17 @@ function showFinal(win, epilogue) {
   $('#winnerText').textContent = `🏆 ${S.names[win.w]}の勝ち！`;
   $('#epilogueText').textContent = `${epilogue || ''}${how ? '\n' + how : ''}`;
   $('#finalScore').innerHTML = scoreHTML();
+  $('#rateNote').textContent = '';
+  $('#againBtn').textContent = 'もう一度あそぶ';
+  $('#againBtn').onclick = () => startGame(S.mode);
   if (!S.saved) {
     S.saved = true;
+    // 図鑑：人間のプレイヤーに出た候補は「見かけた」、選んだ人は「仲間にした」
+    const humans = S.mode === 'cpu' ? [0] : [0, 1];
+    if (typeof Dex !== 'undefined') Dex.record({
+      seen: [...humans.flatMap((p) => (S.pools[p] || []).flat()), ...S.teams.flat()],
+      picked: humans.flatMap((p) => S.teams[p]), wonPicked: S.teams[win.w], humans: humans.length,
+    });
     saveLog({
       at: Date.now(), mode: S.mode, names: S.names, task: S.task, scores: S.scores, winner: win.w, how: win.how,
       teams: S.teams.map((t) => t.map((m) => ({ job: m.job, income: m.income, hobby: m.hobby, skill: m.skill, weak: m.weak || '', ath: m.ath, prop: m.prop || '', out: m.out }))),
@@ -611,6 +621,7 @@ function showFinal(win, epilogue) {
 
 /* ---------- 対戦ログ ---------- */
 const LOG_KEY = 'ext_logs', LOG_MAX = 50;
+const MODE_NAME = { cpu: 'CPU戦', '2p': '2人対戦', online: 'オンライン対戦' };
 function loadLogs() { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; } }
 function saveLog(g) {
   const logs = loadLogs(); logs.unshift(g);
@@ -626,7 +637,7 @@ function showLogs() {
   logs.forEach((g, i) => {
     const b = document.createElement('button');
     b.className = 'btn option';
-    b.innerHTML = `<b>🏆 ${esc(g.names[g.winner])}の勝ち　${g.scores[0]} - ${g.scores[1]}</b><span>${fmtDate(g.at)}｜${g.mode === 'cpu' ? 'CPU戦' : '2人対戦'}<br>${esc(g.task)}</span>`;
+    b.innerHTML = `<b>🏆 ${esc(g.names[g.winner])}の勝ち　${g.scores[0]} - ${g.scores[1]}</b><span>${fmtDate(g.at)}｜${MODE_NAME[g.mode] || '2人対戦'}<br>${esc(g.task)}</span>`;
     b.onclick = () => showLogDetail(i);
     box.appendChild(b);
   });
@@ -636,7 +647,7 @@ function showLogDetail(i) {
   const g = loadLogs()[i]; if (!g) return showLogs();
   const stageName = (k) => (k === STAGES - 1 ? '最終関門' : `第${k + 1}関門`);
   $('#logDetail').innerHTML = `
-    <p class="kicker">${fmtDate(g.at)}｜${g.mode === 'cpu' ? 'CPU戦' : '2人対戦'}</p>
+    <p class="kicker">${fmtDate(g.at)}｜${MODE_NAME[g.mode] || '2人対戦'}</p>
     <h2 class="winner">🏆 ${esc(g.names[g.winner])}の勝ち</h2>
     <div class="score"><span>🟥 ${esc(g.names[0])} ${g.scores[0]}<small>/100</small></span><span>🟦 ${esc(g.names[1])} ${g.scores[1]}<small>/100</small></span></div>
     <div class="taskBox"><p class="kicker">究極の課題</p><p class="task">${esc(g.task)}</p></div>
@@ -901,8 +912,6 @@ $('#saveSettings').onclick = () => {
 };
 $('#retryBtn').onclick = () => retryFn && retryFn();
 $('#miniStart').onclick = miniStart;
-$('#beginBtn').onclick = firstStage;
-$('#againBtn').onclick = () => startGame(S.mode);
 $('#bgmVol').oninput = (e) => Sound.setVol('bgm', e.target.value / 100);
 $('#sfxVol').oninput = (e) => { Sound.setVol('sfx', e.target.value / 100); Sound.sfx('click'); };
 function paintMute() {

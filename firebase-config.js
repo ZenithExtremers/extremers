@@ -3,7 +3,14 @@
    Firebase コンソールの「プロジェクトの設定 → マイアプリ」にある firebaseConfig の中身をここに貼ります。
    この値は公開しても大丈夫なもの（データの守りは firestore.rules で行います）。
    null のままだとオンライン機能はオフになり、CPU戦・2人対戦・図鑑はそのまま使えます。 */
-window.FIREBASE_CONFIG = null;
+window.FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyBuedVzCCth-zob49HWnv11Nqny72OX8UY',
+  authDomain: 'extremers-1e7b7.firebaseapp.com',
+  projectId: 'extremers-1e7b7',
+  storageBucket: 'extremers-1e7b7.firebasestorage.app',
+  messagingSenderId: '391223142171',
+  appId: '1:391223142171:web:24ed267b060a358071d5be',
+};
 /* 例：
 window.FIREBASE_CONFIG = {
   apiKey: 'AIza...',
